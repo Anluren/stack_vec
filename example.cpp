@@ -31,13 +31,11 @@ int main() {
     }
     std::cout << "\nSize: " << aligned_vec.size() << "\n\n";
 
-    // Example 3: Manual allocation with buffer (unaligned)
-    std::cout << "Example 3: Manual buffer allocation (unaligned)\n";
-    constexpr std::size_t buffer_size = 1024;
-    char buffer[buffer_size];  // No alignas needed for unaligned access
-    
-    StackAllocator<double, buffer_size, false> alloc(buffer);
-    std::vector<double, StackAllocator<double, buffer_size, false>> vec(alloc);
+    // Example 3: Direct use of allocator with std::vector
+    std::cout << "Example 3: Direct allocator usage\n";
+    StackAllocator<double, 1024, false> alloc;
+    std::vector<double, StackAllocator<double, 1024, false>> vec(alloc);
+    vec.reserve(10);
     
     for (int i = 0; i < 10; ++i) {
         vec.push_back(i * 3.14);

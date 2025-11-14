@@ -23,17 +23,18 @@ public:
         using other = StackAllocator<U, N, AlignAccess>;
     };
 
-    StackAllocator(char* buffer) noexcept 
-        : m_buffer(buffer)
-        , m_buffer_size(N)
-        , m_offset(0) {
+    StackAllocator() noexcept 
+        : m_offset(0) {
+    }
+
+    // Copy constructor - each allocator has its own buffer
+    StackAllocator(const StackAllocator&) noexcept
+        : m_offset(0) {
     }
 
     template<typename U>
-    StackAllocator(const StackAllocator<U, N, AlignAccess>& other) noexcept
-        : m_buffer(other.m_buffer)
-        , m_buffer_size(other.m_buffer_size)
-        , m_offset(other.m_offset) {
+    StackAllocator(const StackAllocator<U, N, AlignAccess>&) noexcept
+        : m_offset(0) {
     }
 
     pointer allocate(size_type n) {
@@ -51,11 +52,11 @@ public:
         
         const size_type bytes_needed = n * sizeof(T);
         
-        if (aligned_offset + bytes_needed > m_buffer_size) {
+        if (aligned_offset + bytes_needed > N) {
             throw std::bad_alloc();
         }
 
-        pointer result = reinterpret_cast<pointer>(m_buffer + aligned_offset);
+        pointer result = reinterpret_cast<pointer>(reinterpret_cast<char*>(&m_buffer) + aligned_offset);
         m_offset = aligned_offset + bytes_needed;
         
         return result;
@@ -69,16 +70,17 @@ public:
         
         const char* ptr_as_char = reinterpret_cast<const char*>(p);
         const size_type bytes = n * sizeof(T);
+        char* buffer_ptr = reinterpret_cast<char*>(&m_buffer);
         
         // If this was the last allocation, we can reclaim the space
-        if (ptr_as_char + bytes == m_buffer + m_offset) {
-            m_offset = ptr_as_char - m_buffer;
+        if (ptr_as_char + bytes == buffer_ptr + m_offset) {
+            m_offset = ptr_as_char - buffer_ptr;
         }
     }
 
     template<typename U, std::size_t M, bool A>
     bool operator==(const StackAllocator<U, M, A>& other) const noexcept {
-        return m_buffer == other.m_buffer;
+        return &m_buffer == &other.m_buffer;
     }
 
     template<typename U, std::size_t M, bool A>
@@ -91,8 +93,10 @@ public:
     friend class StackAllocator;
 
 private:
-    char* m_buffer;
-    size_type m_buffer_size;
+    // Fixed-size buffer owned by the allocator
+    typename std::conditional<AlignAccess,
+        typename std::aligned_storage<N, alignof(T)>::type,
+        char[N]>::type m_buffer;
     size_type m_offset;
 };
 
@@ -104,11 +108,19 @@ public:
     using vector_type = std::vector<T, allocator_type>;
 
     StackVector() 
-        : m_alloc(reinterpret_cast<char*>(&m_buffer)) 
+        : m_alloc()
         , m_vec(m_alloc) {
         // Reserve the full capacity upfront to avoid reallocations
         m_vec.reserve(N);
     }
+
+    // Disable copy constructor and copy assignment
+    StackVector(const StackVector&) = delete;
+    StackVector& operator=(const StackVector&) = delete;
+
+    // Allow move constructor and move assignment
+    StackVector(StackVector&&) = default;
+    StackVector& operator=(StackVector&&) = default;
 
     // Access the underlying vector
     vector_type& get() { return m_vec; }
@@ -143,10 +155,6 @@ public:
     const T* data() const { return m_vec.data(); }
 
 private:
-    // Use alignment only if AlignAccess is true
-    typename std::conditional<AlignAccess, 
-        typename std::aligned_storage<N * sizeof(T), alignof(T)>::type,
-        char[N * sizeof(T)]>::type m_buffer;
     allocator_type m_alloc;
     vector_type m_vec;
 };
