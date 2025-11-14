@@ -3,9 +3,9 @@
 
 #include <cstddef>
 #include <memory>
-#include <stdexcept>
 #include <type_traits>
 #include <vector>
+#include <cassert>
 
 template<typename T, std::size_t N, bool AlignAccess = true>
 class StackAllocator {
@@ -37,7 +37,7 @@ public:
         : m_offset(0) {
     }
 
-    pointer allocate(size_type n) {
+    pointer allocate(size_type n) noexcept {
         if (n == 0) {
             return nullptr;
         }
@@ -53,7 +53,9 @@ public:
         const size_type bytes_needed = n * sizeof(T);
         
         if (aligned_offset + bytes_needed > N) {
-            throw std::bad_alloc();
+            // Out of buffer space - return nullptr instead of throwing
+            assert(false && "StackAllocator: buffer overflow");
+            return nullptr;
         }
 
         pointer result = reinterpret_cast<pointer>(reinterpret_cast<char*>(&m_buffer) + aligned_offset);
@@ -123,36 +125,38 @@ public:
     StackVector& operator=(StackVector&&) = default;
 
     // Access the underlying vector
-    vector_type& get() { return m_vec; }
-    const vector_type& get() const { return m_vec; }
+    vector_type& get() noexcept { return m_vec; }
+    const vector_type& get() const noexcept { return m_vec; }
 
     // Convenience forwarding methods
     void push_back(const T& value) { m_vec.push_back(value); }
-    void push_back(T&& value) { m_vec.push_back(std::move(value)); }
+    void push_back(T&& value) noexcept(noexcept(std::declval<vector_type>().push_back(std::move(value)))) { 
+        m_vec.push_back(std::move(value)); 
+    }
     
     template<typename... Args>
-    void emplace_back(Args&&... args) {
+    void emplace_back(Args&&... args) noexcept(noexcept(std::declval<vector_type>().emplace_back(std::forward<Args>(args)...))) {
         m_vec.emplace_back(std::forward<Args>(args)...);
     }
 
-    T& operator[](std::size_t idx) { return m_vec[idx]; }
-    const T& operator[](std::size_t idx) const { return m_vec[idx]; }
+    T& operator[](std::size_t idx) noexcept { return m_vec[idx]; }
+    const T& operator[](std::size_t idx) const noexcept { return m_vec[idx]; }
 
-    typename vector_type::iterator begin() { return m_vec.begin(); }
-    typename vector_type::iterator end() { return m_vec.end(); }
-    typename vector_type::const_iterator begin() const { return m_vec.begin(); }
-    typename vector_type::const_iterator end() const { return m_vec.end(); }
-    typename vector_type::const_iterator cbegin() const { return m_vec.cbegin(); }
-    typename vector_type::const_iterator cend() const { return m_vec.cend(); }
+    typename vector_type::iterator begin() noexcept { return m_vec.begin(); }
+    typename vector_type::iterator end() noexcept { return m_vec.end(); }
+    typename vector_type::const_iterator begin() const noexcept { return m_vec.begin(); }
+    typename vector_type::const_iterator end() const noexcept { return m_vec.end(); }
+    typename vector_type::const_iterator cbegin() const noexcept { return m_vec.cbegin(); }
+    typename vector_type::const_iterator cend() const noexcept { return m_vec.cend(); }
 
-    std::size_t size() const { return m_vec.size(); }
-    std::size_t capacity() const { return m_vec.capacity(); }
-    bool empty() const { return m_vec.empty(); }
-    void clear() { m_vec.clear(); }
+    std::size_t size() const noexcept { return m_vec.size(); }
+    std::size_t capacity() const noexcept { return m_vec.capacity(); }
+    bool empty() const noexcept { return m_vec.empty(); }
+    void clear() noexcept { m_vec.clear(); }
     void reserve(std::size_t n) { m_vec.reserve(n); }
 
-    T* data() { return m_vec.data(); }
-    const T* data() const { return m_vec.data(); }
+    T* data() noexcept { return m_vec.data(); }
+    const T* data() const noexcept { return m_vec.data(); }
 
 private:
     allocator_type m_alloc;

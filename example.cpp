@@ -72,12 +72,8 @@ int main() {
     small_vec.push_back(2);
     small_vec.push_back(3);
     
-    try {
-        // This should throw std::bad_alloc as we exceed the buffer
-        small_vec.push_back(4);
-    } catch (const std::bad_alloc& e) {
-        std::cout << "Caught expected exception: buffer full\n";
-    }
+    std::cout << "Small vec size: " << small_vec.size() << "\n";
+    std::cout << "Note: Attempting to exceed capacity will assert in debug builds\n";
 
     return 0;
 }

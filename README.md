@@ -13,6 +13,7 @@ A custom allocator implementation that allows `std::vector` to use a fixed-size 
   - Manual usage with `StackAllocator<T, N, AlignAccess>` for advanced control
 - **Fixed capacity**: Reserves full capacity upfront to prevent reallocations (no buffer growth support needed)
 - **Simple API**: No need to manually manage buffers - allocator owns its storage
+- **No exceptions**: Returns nullptr on allocation failure for maximum performance (asserts in debug builds)
 
 ## Usage
 
@@ -62,10 +63,11 @@ cmake --build .
 ## Limitations
 
 - Fixed capacity determined at compile time (no buffer growth)
-- Exceeding capacity throws `std::bad_alloc`
+- Exceeding capacity returns nullptr (asserts in debug builds)
 - Deallocation only reclaims space for the most recent allocation (stack-like behavior)
 - `StackVector` reserves full capacity upfront to prevent reallocation issues
 - When using manual approach, call `vec.reserve()` upfront to avoid reallocation failures
+- No exception throwing for performance (returns nullptr on allocation failure)
 
 ## Implementation Details
 
