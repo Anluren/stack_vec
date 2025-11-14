@@ -57,7 +57,20 @@ int main() {
     small_vec.push_back(3);
     
     std::cout << "Small vec size: " << small_vec.size() << "\n";
-    std::cout << "Note: Attempting to exceed capacity will assert in debug builds\n";
+    std::cout << "Note: Attempting to exceed capacity will assert in debug builds\n\n";
+
+    // Example 5: Using insert_range with array (integer types only)
+    std::cout << "Example 5: Batch insert with insert_range (integer types)\n";
+    StackVector<int, 20> batch_vec;
+    
+    int data[] = {10, 20, 30, 40, 50};
+    batch_vec.insert_range(data, 5);  // Insert all 5 elements at once
+    
+    std::cout << "Batch inserted contents: ";
+    for (const auto& val : batch_vec) {
+        std::cout << val << " ";
+    }
+    std::cout << "\nSize: " << batch_vec.size() << "\n";
 
     return 0;
 }

@@ -265,6 +265,25 @@ public:
         m_vec.emplace_back(std::forward<Args>(args)...);
     }
 
+    /**
+     * @brief Insert multiple elements from array (for integer types only)
+     * 
+     * This method is specifically for integer types and allows inserting
+     * multiple elements from a C-style array in one call.
+     * 
+     * @param data Pointer to array of elements to insert
+     * @param count Number of elements to insert
+     * 
+     * @note Only available when T is an integral type
+     */
+    template<typename U = T>
+    std::enable_if_t<std::is_integral<U>::value, void>
+    insert_range(const T* data, std::size_t count) noexcept {
+        for (std::size_t i = 0; i < count; ++i) {
+            m_vec.push_back(data[i]);
+        }
+    }
+
     /** @brief Access element at index (unchecked) */
     T& operator[](std::size_t idx) noexcept { return m_vec[idx]; }
     /** @brief Access element at index (unchecked, const) */
