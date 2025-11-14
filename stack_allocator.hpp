@@ -50,8 +50,10 @@ public:
      * @brief Copy constructor
      * 
      * Creates a new allocator with its own buffer. Does not copy the buffer contents.
+     * Required by C++ allocator requirements for use with std::vector.
      * 
      * @param other The allocator to copy from (only used for type compatibility)
+     * @note Each allocator instance has its own independent buffer
      */
     StackAllocator(const StackAllocator&) noexcept
         : m_offset(0) {
@@ -61,6 +63,7 @@ public:
      * @brief Rebind copy constructor
      * 
      * Allows conversion from allocators of different types with the same buffer size.
+     * Creates a new allocator with its own buffer.
      * 
      * @tparam U The value type of the other allocator
      * @param other The allocator to convert from
