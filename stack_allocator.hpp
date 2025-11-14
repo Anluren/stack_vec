@@ -24,16 +24,16 @@ public:
     };
 
     StackAllocator(char* buffer) noexcept 
-        : buffer_(buffer)
-        , buffer_size_(N)
-        , offset_(0) {
+        : m_buffer(buffer)
+        , m_buffer_size(N)
+        , m_offset(0) {
     }
 
     template<typename U>
     StackAllocator(const StackAllocator<U, N, AlignAccess>& other) noexcept
-        : buffer_(other.buffer_)
-        , buffer_size_(other.buffer_size_)
-        , offset_(other.offset_) {
+        : m_buffer(other.m_buffer)
+        , m_buffer_size(other.m_buffer_size)
+        , m_offset(other.m_offset) {
     }
 
     pointer allocate(size_type n) {
@@ -41,22 +41,22 @@ public:
             return nullptr;
         }
 
-        size_type aligned_offset = offset_;
+        size_type aligned_offset = m_offset;
         
         // Only align if AlignAccess is true
         if constexpr (AlignAccess) {
             const size_type alignment = alignof(T);
-            aligned_offset = (offset_ + alignment - 1) & ~(alignment - 1);
+            aligned_offset = (m_offset + alignment - 1) & ~(alignment - 1);
         }
         
         const size_type bytes_needed = n * sizeof(T);
         
-        if (aligned_offset + bytes_needed > buffer_size_) {
+        if (aligned_offset + bytes_needed > m_buffer_size) {
             throw std::bad_alloc();
         }
 
-        pointer result = reinterpret_cast<pointer>(buffer_ + aligned_offset);
-        offset_ = aligned_offset + bytes_needed;
+        pointer result = reinterpret_cast<pointer>(m_buffer + aligned_offset);
+        m_offset = aligned_offset + bytes_needed;
         
         return result;
     }
@@ -71,14 +71,14 @@ public:
         const size_type bytes = n * sizeof(T);
         
         // If this was the last allocation, we can reclaim the space
-        if (ptr_as_char + bytes == buffer_ + offset_) {
-            offset_ = ptr_as_char - buffer_;
+        if (ptr_as_char + bytes == m_buffer + m_offset) {
+            m_offset = ptr_as_char - m_buffer;
         }
     }
 
     template<typename U, std::size_t M, bool A>
     bool operator==(const StackAllocator<U, M, A>& other) const noexcept {
-        return buffer_ == other.buffer_;
+        return m_buffer == other.m_buffer;
     }
 
     template<typename U, std::size_t M, bool A>
@@ -91,9 +91,9 @@ public:
     friend class StackAllocator;
 
 private:
-    char* buffer_;
-    size_type buffer_size_;
-    size_type offset_;
+    char* m_buffer;
+    size_type m_buffer_size;
+    size_type m_offset;
 };
 
 // Helper class to manage the buffer and create vectors with stack allocator
@@ -104,51 +104,51 @@ public:
     using vector_type = std::vector<T, allocator_type>;
 
     StackVector() 
-        : alloc_(reinterpret_cast<char*>(&buffer_)) 
-        , vec_(alloc_) {
+        : m_alloc(reinterpret_cast<char*>(&m_buffer)) 
+        , m_vec(m_alloc) {
         // Reserve the full capacity upfront to avoid reallocations
-        vec_.reserve(N);
+        m_vec.reserve(N);
     }
 
     // Access the underlying vector
-    vector_type& get() { return vec_; }
-    const vector_type& get() const { return vec_; }
+    vector_type& get() { return m_vec; }
+    const vector_type& get() const { return m_vec; }
 
     // Convenience forwarding methods
-    void push_back(const T& value) { vec_.push_back(value); }
-    void push_back(T&& value) { vec_.push_back(std::move(value)); }
+    void push_back(const T& value) { m_vec.push_back(value); }
+    void push_back(T&& value) { m_vec.push_back(std::move(value)); }
     
     template<typename... Args>
     void emplace_back(Args&&... args) {
-        vec_.emplace_back(std::forward<Args>(args)...);
+        m_vec.emplace_back(std::forward<Args>(args)...);
     }
 
-    T& operator[](std::size_t idx) { return vec_[idx]; }
-    const T& operator[](std::size_t idx) const { return vec_[idx]; }
+    T& operator[](std::size_t idx) { return m_vec[idx]; }
+    const T& operator[](std::size_t idx) const { return m_vec[idx]; }
 
-    typename vector_type::iterator begin() { return vec_.begin(); }
-    typename vector_type::iterator end() { return vec_.end(); }
-    typename vector_type::const_iterator begin() const { return vec_.begin(); }
-    typename vector_type::const_iterator end() const { return vec_.end(); }
-    typename vector_type::const_iterator cbegin() const { return vec_.cbegin(); }
-    typename vector_type::const_iterator cend() const { return vec_.cend(); }
+    typename vector_type::iterator begin() { return m_vec.begin(); }
+    typename vector_type::iterator end() { return m_vec.end(); }
+    typename vector_type::const_iterator begin() const { return m_vec.begin(); }
+    typename vector_type::const_iterator end() const { return m_vec.end(); }
+    typename vector_type::const_iterator cbegin() const { return m_vec.cbegin(); }
+    typename vector_type::const_iterator cend() const { return m_vec.cend(); }
 
-    std::size_t size() const { return vec_.size(); }
-    std::size_t capacity() const { return vec_.capacity(); }
-    bool empty() const { return vec_.empty(); }
-    void clear() { vec_.clear(); }
-    void reserve(std::size_t n) { vec_.reserve(n); }
+    std::size_t size() const { return m_vec.size(); }
+    std::size_t capacity() const { return m_vec.capacity(); }
+    bool empty() const { return m_vec.empty(); }
+    void clear() { m_vec.clear(); }
+    void reserve(std::size_t n) { m_vec.reserve(n); }
 
-    T* data() { return vec_.data(); }
-    const T* data() const { return vec_.data(); }
+    T* data() { return m_vec.data(); }
+    const T* data() const { return m_vec.data(); }
 
 private:
     // Use alignment only if AlignAccess is true
     typename std::conditional<AlignAccess, 
         typename std::aligned_storage<N * sizeof(T), alignof(T)>::type,
-        char[N * sizeof(T)]>::type buffer_;
-    allocator_type alloc_;
-    vector_type vec_;
+        char[N * sizeof(T)]>::type m_buffer;
+    allocator_type m_alloc;
+    vector_type m_vec;
 };
 
 #endif // STACK_ALLOCATOR_HPP
