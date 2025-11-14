@@ -7,8 +7,10 @@
 #include <vector>
 #include <cassert>
 
+namespace stack_alloc_internal {
+
 /**
- * @brief Custom allocator that uses a fixed-size buffer for allocations
+ * @brief A custom allocator that uses a fixed-size buffer for allocations.
  * 
  * This allocator owns a fixed-size buffer and allocates memory from it sequentially.
  * It's designed for use cases where heap allocation overhead should be avoided.
@@ -20,6 +22,8 @@
  * @note When AlignAccess is false, allocations are packed without padding for maximum space efficiency
  * @note This allocator does not throw exceptions; allocation failures return nullptr
  * @note Each allocator instance owns its own buffer
+ * @note This is an implementation detail - use StackVector for the public interface
+ * @warning This class is in the detail namespace and should not be used directly
  */
 template<typename T, std::size_t N, bool AlignAccess = true>
 class StackAllocator {
@@ -183,6 +187,8 @@ private:
     size_type m_offset;
 };
 
+} // namespace detail
+
 /**
  * @brief Helper wrapper around std::vector with StackAllocator
  * 
@@ -201,7 +207,7 @@ private:
 template<typename T, std::size_t N, bool AlignAccess = false>
 class StackVector {
 public:
-    using allocator_type = StackAllocator<T, N * sizeof(T), AlignAccess>;
+    using allocator_type = stack_alloc_internal::StackAllocator<T, N * sizeof(T), AlignAccess>;
     using vector_type = std::vector<T, allocator_type>;
 
     /**

@@ -8,16 +8,15 @@ A custom allocator implementation that allows `std::vector` to use a fixed-size 
 - **Configurable alignment**: Optional alignment support via template parameter (defaults to unaligned for maximum space efficiency)
 - **Type-safe**: Template-based design with proper alignment handling when needed
 - **STL-compatible**: Works with `std::vector` and follows allocator requirements
-- **Two usage patterns**:
-  - `StackVector<T, N, AlignAccess>`: Helper class that wraps `std::vector` with the custom allocator
-  - Manual usage with `StackAllocator<T, N, AlignAccess>` for advanced control
+- **Simple API**: `StackVector` wrapper provides easy-to-use interface
+- **Implementation detail**: Internal allocator is in `stack_alloc_internal` namespace, not part of public API
 - **Fixed capacity**: Reserves full capacity upfront to prevent reallocations (no buffer growth support needed)
 - **Simple API**: No need to manually manage buffers - allocator owns its storage
 - **No exceptions**: Returns nullptr on allocation failure for maximum performance (asserts in debug builds)
 
 ## Usage
 
-### Simple approach with StackVector
+### Basic usage with StackVector
 
 ```cpp
 #include "stack_allocator.hpp"
@@ -34,20 +33,6 @@ StackVector<int, 10, true> aligned_vec;
 for (const auto& val : vec) {
     std::cout << val << " ";
 }
-```
-
-### Manual approach with direct allocator usage
-
-```cpp
-#include "stack_allocator.hpp"
-#include <vector>
-
-// Allocator owns a 1024-byte buffer
-StackAllocator<int, 1024, false> alloc;
-std::vector<int, StackAllocator<int, 1024, false>> vec(alloc);
-vec.reserve(100);  // Reserve capacity upfront to avoid reallocations
-
-vec.push_back(42);
 ```
 
 ## Building
@@ -72,6 +57,7 @@ cmake --build .
 ## Implementation Details
 
 - **Buffer ownership**: Each allocator instance owns its own fixed-size buffer as a member variable
+- **Namespace**: Internal allocator is in `stack_alloc_internal` namespace to indicate it's not part of public API
 - **Alignment**: Optional alignment via third template parameter (`AlignAccess`)
   - `false` (default): No alignment, maximum space efficiency, supports unaligned access
   - `true`: Proper alignment for types, may waste some buffer space but can be faster on some architectures

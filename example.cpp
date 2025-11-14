@@ -31,24 +31,8 @@ int main() {
     }
     std::cout << "\nSize: " << aligned_vec.size() << "\n\n";
 
-    // Example 3: Direct use of allocator with std::vector
-    std::cout << "Example 3: Direct allocator usage\n";
-    StackAllocator<double, 1024, false> alloc;
-    std::vector<double, StackAllocator<double, 1024, false>> vec(alloc);
-    vec.reserve(10);
-    
-    for (int i = 0; i < 10; ++i) {
-        vec.push_back(i * 3.14);
-    }
-    
-    std::cout << "Manual vector contents: ";
-    for (const auto& val : vec) {
-        std::cout << val << " ";
-    }
-    std::cout << "\nSize: " << vec.size() << "\n\n";
-
-    // Example 4: With custom types
-    std::cout << "Example 4: With custom struct\n";
+    // Example 3: With custom types
+    std::cout << "Example 3: With custom struct\n";
     struct Point {
         float x, y, z;
         Point(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
@@ -65,8 +49,8 @@ int main() {
     }
     std::cout << "\n\n";
 
-    // Example 5: Testing capacity limits
-    std::cout << "Example 5: Testing capacity\n";
+    // Example 4: Testing capacity limits
+    std::cout << "Example 4: Testing capacity\n";
     StackVector<int, 3> small_vec;
     small_vec.push_back(1);
     small_vec.push_back(2);
