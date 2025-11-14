@@ -248,7 +248,9 @@ public:
     // Convenience forwarding methods
     
     /** @brief Add element to the end (copy) */
-    void push_back(const T& value) { m_vec.push_back(value); }
+    void push_back(const T& value) noexcept(noexcept(std::declval<vector_type>().push_back(value))) { 
+        m_vec.push_back(value); 
+    }
     
     /** @brief Add element to the end (move) */
     void push_back(T&& value) noexcept(noexcept(std::declval<vector_type>().push_back(std::move(value)))) { 
