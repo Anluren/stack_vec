@@ -217,8 +217,8 @@ public:
      * reallocations that would exceed the fixed buffer size.
      */
     StackVector() 
-        : m_alloc()
-        , m_vec(m_alloc) {
+        : m_alloc{}
+        , m_vec{m_alloc} {
         // Reserve the full capacity upfront to avoid reallocations
         m_vec.reserve(N);
     }
@@ -231,10 +231,9 @@ public:
      * @param init Initializer list of elements
      */
     StackVector(std::initializer_list<T> init)
-        : m_alloc()
-        , m_vec(m_alloc) {
-        m_vec.reserve(N);
-        m_vec.insert(m_vec.end(), init.begin(), init.end());
+        : m_alloc{}
+        , m_vec{init, m_alloc} {
+        // Vector is already constructed with the initializer list elements
     }
 
     /// Copy constructor is deleted (buffer cannot be efficiently copied)
