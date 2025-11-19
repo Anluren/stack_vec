@@ -223,6 +223,20 @@ public:
         m_vec.reserve(N);
     }
 
+    /**
+     * @brief Constructor from initializer list
+     * 
+     * Creates a StackVector and initializes it with elements from an initializer list.
+     * 
+     * @param init Initializer list of elements
+     */
+    StackVector(std::initializer_list<T> init)
+        : m_alloc()
+        , m_vec(m_alloc) {
+        m_vec.reserve(N);
+        m_vec.insert(m_vec.end(), init.begin(), init.end());
+    }
+
     /// Copy constructor is deleted (buffer cannot be efficiently copied)
     StackVector(const StackVector&) = delete;
     /// Copy assignment is deleted (buffer cannot be efficiently copied)
@@ -307,7 +321,7 @@ public:
     /** @brief Get number of elements */
     std::size_t size() const noexcept { return m_vec.size(); }
     /** @brief Get capacity (always N) */
-    std::size_t capacity() const noexcept { return m_vec.capacity(); }
+    static constexpr std::size_t capacity() { return N; }
     /** @brief Check if empty */
     bool empty() const noexcept { return m_vec.empty(); }
     /** @brief Remove all elements */

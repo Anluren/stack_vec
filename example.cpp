@@ -70,7 +70,17 @@ int main() {
     for (const auto& val : batch_vec) {
         std::cout << val << " ";
     }
-    std::cout << "\nSize: " << batch_vec.size() << "\n";
+    std::cout << "\nSize: " << batch_vec.size() << "\n\n";
+
+    // Example 6: Using initializer list constructor
+    std::cout << "Example 6: Initializer list constructor\n";
+    StackVector<int, 10> init_vec = {100, 200, 300, 400, 500};
+    
+    std::cout << "Initialized vector contents: ";
+    for (const auto& val : init_vec) {
+        std::cout << val << " ";
+    }
+    std::cout << "\nSize: " << init_vec.size() << "\n";
 
     return 0;
 }
