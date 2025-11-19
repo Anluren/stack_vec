@@ -80,7 +80,17 @@ int main() {
     for (const auto& val : init_vec) {
         std::cout << val << " ";
     }
-    std::cout << "\nSize: " << init_vec.size() << "\n";
+    std::cout << "\nSize: " << init_vec.size() << "\n\n";
+
+    // Example 7: Fill constructor with n copies of value
+    std::cout << "Example 7: Fill constructor (n copies of value)\n";
+    StackVector<int, 10> fill_vec(7, 42);  // 7 copies of 42
+    
+    std::cout << "Filled vector contents: ";
+    for (const auto& val : fill_vec) {
+        std::cout << val << " ";
+    }
+    std::cout << "\nSize: " << fill_vec.size() << "\n";
 
     return 0;
 }

@@ -236,6 +236,24 @@ public:
         // Vector is already constructed with the initializer list elements
     }
 
+    /**
+     * @brief Constructor to fill with n copies of value
+     * 
+     * Creates a StackVector and fills it with n copies of the given value.
+     * 
+     * @param count Number of elements to create
+     * @param value Value to copy into each element
+     * 
+     * @note Must be called with parentheses, not braces:
+     *       StackVector<int, 10> vec(5, 42);  // 5 copies of 42
+     *       StackVector<int, 10> vec{5, 42};  // initializer_list with 2 elements!
+     */
+    StackVector(std::size_t count, const T& value)
+        : m_alloc{}
+        , m_vec{count, value, m_alloc} {
+        // Vector is already constructed with count copies of value
+    }
+
     /// Copy constructor is deleted (buffer cannot be efficiently copied)
     StackVector(const StackVector&) = delete;
     /// Copy assignment is deleted (buffer cannot be efficiently copied)
