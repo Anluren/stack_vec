@@ -90,28 +90,16 @@ public:
      * @note Allocations are made sequentially from the buffer
      */
     pointer allocate(size_type n) noexcept {
-        if (n == 0) {
-            return nullptr;
-        }
-
-        size_type aligned_offset = m_offset;
-        
-        // Only align if AlignAccess is true
-        if constexpr (AlignAccess) {
-            const size_type alignment = alignof(T);
-            aligned_offset = (m_offset + alignment - 1) & ~(alignment - 1);
-        }
-        
         const size_type bytes_needed = n * sizeof(T);
         
-        if (aligned_offset + bytes_needed > N) {
+        if (m_offset + bytes_needed > N) {
             // Out of buffer space - return nullptr instead of throwing
             assert(false && "StackAllocator: buffer overflow");
             return nullptr;
         }
 
-        pointer result = reinterpret_cast<pointer>(reinterpret_cast<char*>(&m_buffer) + aligned_offset);
-        m_offset = aligned_offset + bytes_needed;
+        pointer result = reinterpret_cast<pointer>(reinterpret_cast<char*>(&m_buffer) + m_offset);
+        m_offset += bytes_needed;
         
         return result;
     }
