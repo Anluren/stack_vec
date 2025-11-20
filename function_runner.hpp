@@ -6,6 +6,28 @@
 #include <functional>
 
 /**
+ * @brief Helper struct for creating FunctionRunner steps
+ * 
+ * This allows for cleaner syntax when using make_function_runner:
+ * @code
+ * auto runner = make_function_runner(
+ *     step([]() { return true; }, "Step 1 failed"),
+ *     step([]() { return false; }, "Step 2 failed")
+ * );
+ * @endcode
+ */
+template<typename Func>
+struct StepWrapper {
+    Func func;
+    const char* error_msg;
+};
+
+template<typename Func>
+StepWrapper<Func> step(Func&& f, const char* msg) {
+    return StepWrapper<Func>{std::forward<Func>(f), msg};
+}
+
+/**
  * @brief A function runner that executes a fixed sequence of functions and tracks failures
  * 
  * This class manages a fixed-size array of functions paired with error messages.
@@ -70,8 +92,26 @@ public:
     }
 };
 
-// Deduction guide for C++17
-template<typename... Steps>
-FunctionRunner(Steps...) -> FunctionRunner<sizeof...(Steps)>;
+/**
+ * @brief Helper function to create a FunctionRunner with automatic size deduction
+ * 
+ * This function allows you to create a FunctionRunner without explicitly specifying
+ * the template parameter N. Use the step() helper function for clean syntax.
+ * 
+ * Example usage:
+ * @code
+ * auto runner = make_function_runner(
+ *     step([]() { return true; }, "Step 1 failed"),
+ *     step([]() { return false; }, "Step 2 failed"),
+ *     step([]() { return true; }, "Step 3 failed")
+ * );
+ * runner.run();
+ * @endcode
+ */
+template<typename... Funcs>
+auto make_function_runner(StepWrapper<Funcs>... steps) {
+    constexpr std::size_t N = sizeof...(Funcs);
+    return FunctionRunner<N>{{typename FunctionRunner<N>::Step{steps.func, steps.error_msg}...}};
+}
 
 
