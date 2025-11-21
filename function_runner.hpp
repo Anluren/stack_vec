@@ -4,6 +4,7 @@
 #include <utility>
 #include <iostream>
 #include <functional>
+#include <string_view>
 
 /**
  * @brief Helper struct for creating FunctionRunner steps
@@ -19,11 +20,11 @@
 template<typename Func>
 struct StepWrapper {
     Func func;
-    const char* error_msg;
+    std::string_view error_msg;
 };
 
 template<typename Func>
-StepWrapper<Func> step(Func&& f, const char* msg) {
+StepWrapper<Func> step(Func&& f, std::string_view msg) {
     return StepWrapper<Func>{std::forward<Func>(f), msg};
 }
 
@@ -59,7 +60,7 @@ public:
     /// Type for a function-message pair
     struct Step {
         std::function<bool()> func;
-        const char* error_msg;
+        std::string_view error_msg;
     };
 
     /// Array of function steps
