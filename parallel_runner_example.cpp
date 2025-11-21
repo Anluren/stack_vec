@@ -1,5 +1,6 @@
 #include "parallel_runner.hpp"
 #include <iostream>
+#include <functional>
 
 // Test functions for parallel execution
 bool check_disk_space() {
@@ -20,6 +21,22 @@ bool check_network() {
 bool check_permissions() {
     std::cout << "Checking permissions...\n";
     return false;  // Simulate failure
+}
+
+// Functions with arguments for std::bind example
+bool check_port_open(int port) {
+    std::cout << "Checking if port " << port << " is open...\n";
+    return port == 80 || port == 443;  // Only HTTP/HTTPS ports open
+}
+
+bool check_file_exists(const std::string& path) {
+    std::cout << "Checking if file exists: " << path << "\n";
+    return path == "/etc/config.ini";  // Only this file exists
+}
+
+bool check_service_running(const std::string& service) {
+    std::cout << "Checking if service is running: " << service << "\n";
+    return service == "nginx";  // Only nginx is running
 }
 
 int main() {
@@ -164,6 +181,69 @@ int main() {
             }
         }
     }
+    
+    std::cout << "\n=== Example 6: Using std::bind with parallel checks ===\n";
+    
+    auto bind_runner = make_parallel_runner(
+        parallel_step(std::bind(check_port_open, 80), 
+                     "Port 80 check failed"),
+        
+        parallel_step(std::bind(check_port_open, 22), 
+                     "Port 22 check failed"),
+        
+        parallel_step(std::bind(check_file_exists, "/etc/config.ini"), 
+                     "Config file check failed"),
+        
+        parallel_step(std::bind(check_service_running, "nginx"), 
+                     "Nginx service check failed"),
+        
+        parallel_step(std::bind(check_service_running, "apache"), 
+                     "Apache service check failed")
+    );
+    
+    bind_runner.run();
+    
+    std::cout << "\nResults with std::bind:\n";
+    std::cout << "  Success: " << bind_runner.success_count() << "/" 
+              << bind_runner.size() << "\n";
+    std::cout << "  Failures: " << bind_runner.failure_count() << "\n";
+    
+    if (!bind_runner.all_succeeded()) {
+        std::cout << "\nFailed checks:\n";
+        for (std::size_t i = 0; i < bind_runner.size(); ++i) {
+            if (!bind_runner.result(i)) {
+                std::cout << "  - " << bind_runner.error_message(i) << "\n";
+            }
+        }
+    }
+    
+    std::cout << "\n=== Example 7: Using lambdas with captures ===\n";
+    
+    int http_port = 80;
+    int ssh_port = 22;
+    std::string config = "/etc/config.ini";
+    
+    auto lambda_runner = make_parallel_runner(
+        parallel_step([&](){ return check_port_open(http_port); }, 
+                     "HTTP port check failed"),
+        
+        parallel_step([&](){ return check_port_open(ssh_port); }, 
+                     "SSH port check failed"),
+        
+        parallel_step([&](){ return check_file_exists(config); }, 
+                     "Config file check failed"),
+        
+        parallel_step([](){ return check_service_running("nginx"); }, 
+                     "Nginx service check failed")
+    );
+    
+    lambda_runner.run();
+    
+    std::cout << "\nResults with lambda captures:\n";
+    std::cout << "  All succeeded: " << (lambda_runner.all_succeeded() ? "Yes" : "No") << "\n";
+    std::cout << "  Any succeeded: " << (lambda_runner.any_succeeded() ? "Yes" : "No") << "\n";
+    std::cout << "  Success rate: " << lambda_runner.success_count() << "/" 
+              << lambda_runner.size() << "\n";
     
     return 0;
 }

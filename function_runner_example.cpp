@@ -1,5 +1,6 @@
 #include "function_runner.hpp"
 #include <iostream>
+#include <functional>
 
 // Some test functions that return bool (true = success, false = failure)
 bool initialize_system() {
@@ -20,6 +21,22 @@ bool load_configuration() {
 bool start_server() {
     std::cout << "Starting server...\n";
     return true;
+}
+
+// Functions with arguments for std::bind example
+bool connect_to_server(const std::string& host, int port) {
+    std::cout << "Connecting to " << host << ":" << port << "\n";
+    return true;
+}
+
+bool validate_range(int value, int min, int max) {
+    std::cout << "Validating " << value << " in range [" << min << ", " << max << "]\n";
+    return value >= min && value <= max;
+}
+
+bool authenticate_user(const std::string& username, const std::string& password) {
+    std::cout << "Authenticating user: " << username << "\n";
+    return username == "admin" && password == "secret";
 }
 
 int main() {
@@ -127,6 +144,54 @@ int main() {
         std::cout << "Rerun result: " << (rerun_result ? "Success" : "Failed again") << "\n";
     } else {
         std::cout << "All steps completed successfully!\n";
+    }
+    
+    std::cout << "\n=== Example 5: Using std::bind with functions that have arguments ===\n";
+    
+    auto bind_runner = make_function_runner(
+        step(std::bind(connect_to_server, "localhost", 8080), 
+             "Server connection failed"),
+        
+        step(std::bind(validate_range, 42, 0, 100), 
+             "Range validation failed"),
+        
+        step(std::bind(authenticate_user, "admin", "secret"), 
+             "Authentication failed")
+    );
+    
+    result = bind_runner.run();
+    
+    if (result >= 0) {
+        std::cout << "Failed at step " << result << ": " 
+                  << bind_runner.error_message(result) << "\n";
+    } else {
+        std::cout << "All steps with std::bind succeeded!\n";
+    }
+    
+    std::cout << "\n=== Example 6: Using lambdas with captures (alternative to std::bind) ===\n";
+    
+    std::string host = "192.168.1.100";
+    int port = 3000;
+    int value = 75;
+    
+    auto lambda_runner = make_function_runner(
+        step([&](){ return connect_to_server(host, port); }, 
+             "Server connection failed"),
+        
+        step([&](){ return validate_range(value, 0, 100); }, 
+             "Range validation failed"),
+        
+        step([](){ return authenticate_user("admin", "secret"); }, 
+             "Authentication failed")
+    );
+    
+    result = lambda_runner.run();
+    
+    if (result >= 0) {
+        std::cout << "Failed at step " << result << ": " 
+                  << lambda_runner.error_message(result) << "\n";
+    } else {
+        std::cout << "All steps with lambda captures succeeded!\n";
     }
     
     return 0;
