@@ -4,23 +4,28 @@ theme: default
 paginate: true
 ---
 
-# FunctionRunner
+# Function Runners
 
-A lightweight, stack-based utility for sequential function execution with error tracking
+Lightweight, stack-based utilities for function execution with error tracking
+
+**FunctionRunner** - Sequential execution with early exit  
+**ParallelRunner** - Execute all and collect results
 
 ---
 
-## What is FunctionRunner?
+## What are Function Runners?
 
-- **Type-safe** function sequencer with compile-time size
-- Executes functions **sequentially** until one fails
-- **Zero heap allocation** - uses fixed-size array
+- **Type-safe** function sequencers with compile-time size
+- **Zero heap allocation** - uses fixed-size arrays
 - Tracks **failure state** and provides diagnostics
 - Clean API with **automatic template deduction**
+- Two variants for different use cases
 
 ---
 
-## Basic Usage
+## FunctionRunner: Sequential Execution
+
+Executes functions **sequentially** until one fails (early exit)
 
 ```cpp
 #include "function_runner.hpp"
@@ -33,17 +38,61 @@ auto runner = make_function_runner(
     
     step([]() { 
         std::cout << "Connecting...\n";
-        return false;  // Simulates failure
+        return false;  // Stops here!
     }, "Connection failed"),
     
     step([]() { 
-        std::cout << "Starting...\n";
+        std::cout << "Starting...\n";  // Never runs
         return true; 
     }, "Startup failed")
 );
 
-int failed_idx = runner.run();  // Returns index of failed step
+int failed_idx = runner.run();  // Returns 1 (second step)
 ```
+
+---
+
+## ParallelRunner: Collect All Results
+
+Executes **all** functions regardless of failures
+
+```cpp
+#include "parallel_runner.hpp"
+
+auto runner = make_parallel_runner(
+    parallel_step([]() { 
+        std::cout << "Check 1...\n";
+        return true; 
+    }, "Check 1 failed"),
+    
+    parallel_step([]() { 
+        std::cout << "Check 2...\n";
+        return false;  // Keeps going!
+    }, "Check 2 failed"),
+    
+    parallel_step([]() { 
+        std::cout << "Check 3...\n";  // Still runs!
+        return true; 
+    }, "Check 3 failed")
+);
+
+runner.run();  // Executes all three
+std::cout << runner.success_count() << "/3 succeeded\n";  // 2/3
+```
+
+---
+
+## Choosing Between Them
+
+### Use **FunctionRunner** when:
+- Steps are **dependent** (later steps need earlier ones)
+- Want to **stop immediately** on first failure
+- Example: System initialization, deployment pipelines
+
+### Use **ParallelRunner** when:
+- Steps are **independent**
+- Need to see **all failures**, not just first
+- Example: Validation checks, health monitoring, batch diagnostics
 
 ---
 
@@ -103,7 +152,26 @@ if (result >= 0) {
 
 ---
 
-## API Overview
+## ParallelRunner: API Overview
+
+### Execution
+- `void run()` - Execute all steps, stores results
+
+### Queries
+- `bool result(size_t idx)` - Get individual step result
+- `const array<bool, N>& results()` - Get all results
+- `bool all_succeeded()` - Check if all passed
+- `bool any_succeeded()` - Check if any passed
+- `size_t success_count()` - Count successes
+- `size_t failure_count()` - Count failures
+
+### Retry
+- `bool rerun(size_t idx)` - Retry specific step
+- `size_t rerun_failed()` - Retry all failed steps
+
+---
+
+## FunctionRunner: API Overview
 
 ### Execution
 - `int run()` - Execute all steps, returns `-1` or failed index
@@ -120,7 +188,36 @@ if (result >= 0) {
 
 ---
 
-## Implementation Details
+## ParallelRunner: Batch Retry
+
+```cpp
+auto health_checks = make_parallel_runner(
+    parallel_step(check_disk, "Disk check failed"),
+    parallel_step(check_network, "Network check failed"),
+    parallel_step(check_memory, "Memory check failed")
+);
+
+health_checks.run();
+
+if (!health_checks.all_succeeded()) {
+    std::cout << "Some checks failed, retrying...\n";
+    size_t recovered = health_checks.rerun_failed();
+    std::cout << "Recovered " << recovered << " checks\n";
+    
+    if (!health_checks.all_succeeded()) {
+        std::cout << "Failed checks:\n";
+        for (size_t i = 0; i < health_checks.size(); ++i) {
+            if (!health_checks.result(i)) {
+                std::cout << "  - " << health_checks.error_message(i) << "\n";
+            }
+        }
+    }
+}
+```
+
+---
+
+## Implementation: FunctionRunner
 
 ```cpp
 template<std::size_t N>
@@ -141,9 +238,31 @@ class FunctionRunner {
 
 ---
 
+## Implementation: ParallelRunner
+
+```cpp
+template<std::size_t N>
+class ParallelRunner {
+    struct Step {
+        std::function<bool()> func;
+        std::string_view error_msg;
+    };
+    
+    Step m_steps[N];                    // Fixed-size array
+    mutable std::array<bool, N> m_results{};  // Result storage
+    mutable bool m_executed = false;    // Execution flag
+};
+```
+
+- Same efficient design as FunctionRunner
+- Additional result storage for all steps
+- Both runners share similar API patterns
+
+---
+
 ## Use Cases
 
-### System Initialization
+### FunctionRunner: System Initialization
 ```cpp
 auto startup = make_function_runner(
     step(init_logging, "Logging init failed"),
@@ -151,15 +270,41 @@ auto startup = make_function_runner(
     step(init_database, "Database init failed"),
     step(load_plugins, "Plugin load failed")
 );
+// Stops at first failure
 ```
 
-### Validation Pipelines
+### ParallelRunner: Health Checks
+```cpp
+auto health = make_parallel_runner(
+    parallel_step(check_disk, "Disk check failed"),
+    parallel_step(check_network, "Network check failed"),
+    parallel_step(check_memory, "Memory check failed")
+);
+// Runs all checks, collects all results
+```
+
+---
+
+## Use Cases
+
+### FunctionRunner: Validation Pipelines
 ```cpp
 auto validator = make_function_runner(
     step([]() { return validate_input(); }, "Invalid input"),
     step([]() { return check_permissions(); }, "Access denied"),
     step([]() { return verify_resources(); }, "Resources unavailable")
 );
+// Early exit on first validation failure
+```
+
+### ParallelRunner: Feature Compatibility
+```cpp
+auto compat = make_parallel_runner(
+    parallel_step(check_webgl, "WebGL not supported"),
+    parallel_step(check_local_storage, "LocalStorage unavailable"),
+    parallel_step(check_web_workers, "Web Workers not supported")
+);
+// Check all features, show comprehensive report
 ```
 
 ---
@@ -325,17 +470,35 @@ Preserves value category (lvalue/rvalue) without template bloat.
 
 ---
 
-## Summary
+## Summary: FunctionRunner
 
-FunctionRunner provides:
-- ✅ Sequential execution with early exit on failure
+**Sequential execution with early exit**
+
+- ✅ Stops at first failure
+- ✅ Perfect for dependent operations
+- ✅ Minimal overhead when stopping early
 - ✅ Automatic template argument deduction
 - ✅ Built-in error tracking and diagnostics
-- ✅ Retry capability for failed steps
 - ✅ Zero heap allocation
 - ✅ Clean, modern C++17 API
 
-Perfect for initialization sequences, validation pipelines, and multi-step workflows!
+Use for: Initialization sequences, deployment pipelines, dependent validation
+
+---
+
+## Summary: ParallelRunner
+
+**Execute all and collect results**
+
+- ✅ Runs all operations regardless of individual failures
+- ✅ Comprehensive result collection and analysis
+- ✅ Batch retry of failed operations
+- ✅ Automatic template argument deduction
+- ✅ Built-in error tracking and diagnostics
+- ✅ Zero heap allocation
+- ✅ Clean, modern C++17 API
+
+Use for: Health checks, independent validations, feature detection
 
 ---
 

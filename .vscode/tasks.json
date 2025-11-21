@@ -1,0 +1,61 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Export slides to PDF",
+            "type": "shell",
+            "command": "marp",
+            "args": [
+                "${file}",
+                "--pdf",
+                "--allow-local-files"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "label": "Export function_runner_slides.md to PDF",
+            "type": "shell",
+            "command": "marp",
+            "args": [
+                "${workspaceFolder}/function_runner_slides.md",
+                "--pdf",
+                "--allow-local-files",
+                "-o",
+                "${workspaceFolder}/function_runner_slides.pdf"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "label": "Build all examples",
+            "type": "shell",
+            "command": "ninja",
+            "args": [],
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

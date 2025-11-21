@@ -250,3 +250,4 @@ auto make_parallel_runner(parallel_runner_internal::StepWrapper<Funcs>... steps)
     constexpr std::size_t N = sizeof...(Funcs);
     return ParallelRunner<N>{{typename ParallelRunner<N>::Step{steps.func, steps.error_msg}...}};
 }
+
