@@ -6,6 +6,8 @@
 #include <functional>
 #include <string_view>
 
+namespace function_runner_internal {
+
 /**
  * @brief Helper struct for creating FunctionRunner steps
  * 
@@ -23,9 +25,11 @@ struct StepWrapper {
     std::string_view error_msg;
 };
 
+} // namespace function_runner_internal
+
 template<typename Func>
-StepWrapper<Func> step(Func&& f, std::string_view msg) {
-    return StepWrapper<Func>{std::forward<Func>(f), msg};
+function_runner_internal::StepWrapper<Func> step(Func&& f, std::string_view msg) {
+    return function_runner_internal::StepWrapper<Func>{std::forward<Func>(f), msg};
 }
 
 /**
@@ -65,23 +69,87 @@ public:
 
     /// Array of function steps
     Step m_steps[N];
+    
+    /// Index of the failed step, or -1 if no failure
+    mutable int m_failed_step = -1;
 
     /**
      * @brief Run all registered functions sequentially
      * 
      * Executes each function in order. If a function returns false,
-     * prints its error message to stderr and stops execution.
+     * stops execution and records the failed step index.
      * 
      * @return Index of the first failed function, or -1 if all succeeded
      */
     int run() const {
         for (std::size_t i = 0; i < N; ++i) {
             if (!m_steps[i].func()) {
-                std::cerr << "Error: " << m_steps[i].error_msg << "\n";
-                return static_cast<int>(i);
+                m_failed_step = static_cast<int>(i);
+                return m_failed_step;
             }
         }
+        m_failed_step = -1;
         return -1;
+    }
+
+    /**
+     * @brief Get the index of the failed step
+     * @return Index of the failed step, or -1 if all succeeded or run() hasn't been called
+     */
+    int failed_step() const noexcept {
+        return m_failed_step;
+    }
+
+    /**
+     * @brief Get the error message for a specific step by index
+     * @param index The step index
+     * @return The error message for the given step, or empty string if out of bounds
+     */
+    std::string_view error_message(std::size_t index) const noexcept {
+        if (index < N) {
+            return m_steps[index].error_msg;
+        }
+        return "";
+    }
+
+    /**
+     * @brief Get the error message for a specific step by function pointer
+     * @param func Pointer to the std::function to look up
+     * @return The error message for the given step, or empty string if not found
+     */
+    std::string_view error_message(const std::function<bool()>* func) const noexcept {
+        for (std::size_t i = 0; i < N; ++i) {
+            if (&m_steps[i].func == func) {
+                return m_steps[i].error_msg;
+            }
+        }
+        return "";
+    }
+
+    /**
+     * @brief Rerun a specific step by index
+     * @param index The step index to rerun
+     * @return true if the step succeeded, false if it failed or index out of bounds
+     */
+    bool rerun(std::size_t index) const {
+        if (index < N) {
+            return m_steps[index].func();
+        }
+        return false;
+    }
+
+    /**
+     * @brief Rerun a specific step by function pointer
+     * @param func Pointer to the std::function to rerun
+     * @return true if the step succeeded, false if it failed or function not found
+     */
+    bool rerun(const std::function<bool()>* func) const {
+        for (std::size_t i = 0; i < N; ++i) {
+            if (&m_steps[i].func == func) {
+                return m_steps[i].func();
+            }
+        }
+        return false;
     }
 
     /**
@@ -110,7 +178,7 @@ public:
  * @endcode
  */
 template<typename... Funcs>
-auto make_function_runner(StepWrapper<Funcs>... steps) {
+auto make_function_runner(function_runner_internal::StepWrapper<Funcs>... steps) {
     constexpr std::size_t N = sizeof...(Funcs);
     return FunctionRunner<N>{{typename FunctionRunner<N>::Step{steps.func, steps.error_msg}...}};
 }

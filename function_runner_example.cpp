@@ -85,5 +85,47 @@ int main() {
         std::cout << "All tasks completed successfully!\n";
     }
     
+    std::cout << "\n=== Example 4: Using failed_step(), error_message(), and rerun() APIs ===\n";
+    
+    auto diagnostic_runner = make_function_runner(
+        step([]() -> bool {
+            std::cout << "Step A: Pre-flight check...\n";
+            return true;
+        }, "Pre-flight check failed"),
+        
+        step([]() -> bool {
+            std::cout << "Step B: Network connection...\n";
+            return false;  // This will fail
+        }, "Network connection failed"),
+        
+        step([]() -> bool {
+            std::cout << "Step C: Final verification...\n";
+            return true;
+        }, "Final verification failed")
+    );
+    
+    int result = diagnostic_runner.run();
+    
+    if (result >= 0) {
+        std::cout << "Run failed at step " << result << "\n";
+        std::cout << "Failed step index from API: " << diagnostic_runner.failed_step() << "\n";
+        
+        // Test index-based API
+        std::cout << "Error message (by index): " << diagnostic_runner.error_message(result) << "\n";
+        
+        // Test pointer-based API
+        std::cout << "Error message (by pointer): " << diagnostic_runner.error_message(&diagnostic_runner.m_steps[result].func) << "\n";
+        
+        std::cout << "\nAttempting to rerun the failed step (by index)...\n";
+        bool rerun_result = diagnostic_runner.rerun(result);
+        std::cout << "Rerun result: " << (rerun_result ? "Success" : "Failed again") << "\n";
+        
+        std::cout << "\nAttempting to rerun using pointer...\n";
+        rerun_result = diagnostic_runner.rerun(&diagnostic_runner.m_steps[result].func);
+        std::cout << "Rerun result: " << (rerun_result ? "Success" : "Failed again") << "\n";
+    } else {
+        std::cout << "All steps completed successfully!\n";
+    }
+    
     return 0;
 }
