@@ -2,9 +2,10 @@
 
 #include <cstddef>
 #include <utility>
-#include <functional>
 #include <string_view>
 #include <array>
+#include <tuple>
+#include <type_traits>
 
 namespace parallel_runner_internal {
 
@@ -20,8 +21,8 @@ struct StepWrapper {
 } // namespace parallel_runner_internal
 
 template<typename Func>
-parallel_runner_internal::StepWrapper<Func> parallel_step(Func&& f, std::string_view msg) {
-    return parallel_runner_internal::StepWrapper<Func>{std::forward<Func>(f), msg};
+parallel_runner_internal::StepWrapper<std::decay_t<Func>> parallel_step(Func&& f, std::string_view msg) {
+    return parallel_runner_internal::StepWrapper<std::decay_t<Func>>{std::forward<Func>(f), msg};
 }
 
 /**
@@ -30,15 +31,18 @@ parallel_runner_internal::StepWrapper<Func> parallel_step(Func&& f, std::string_
  * Unlike FunctionRunner which stops on first failure, ParallelRunner executes
  * all functions regardless of individual failures and stores all results.
  * 
- * @tparam N Number of functions to execute
+ * This class stores each function with its actual type (no type erasure), providing
+ * zero-overhead execution with no heap allocations.
+ * 
+ * @tparam Funcs The types of callable objects to execute
  * 
  * Example usage:
  * @code
- * ParallelRunner<3> runner{{
- *     {[]() { return true; }, "Check 1 failed"},
- *     {[]() { return false; }, "Check 2 failed"},
- *     {[]() { return true; }, "Check 3 failed"}
- * }};
+ * auto runner = make_parallel_runner(
+ *     parallel_step([]() { return true; }, "Check 1 failed"),
+ *     parallel_step([]() { return false; }, "Check 2 failed"),
+ *     parallel_step([]() { return true; }, "Check 3 failed")
+ * );
  * 
  * runner.run();
  * 
@@ -50,20 +54,14 @@ parallel_runner_internal::StepWrapper<Func> parallel_step(Func&& f, std::string_
  * }
  * @endcode
  */
-template<std::size_t N>
+template<typename... Funcs>
 class ParallelRunner {
 public:
-    /// Type for a function-message pair
-    struct Step {
-        std::function<bool()> func;
-        std::string_view error_msg;
-    };
-
-    /// Array of function steps
-    Step m_steps[N];
+    /// Tuple storing each function with its error message
+    std::tuple<std::pair<Funcs, std::string_view>...> m_steps;
     
     /// Array to store results of each function
-    mutable std::array<bool, N> m_results{};
+    mutable std::array<bool, sizeof...(Funcs)> m_results{};
     
     /// Flag indicating whether run() has been called
     mutable bool m_executed = false;
@@ -76,9 +74,7 @@ public:
      * or running all independent operations.
      */
     void run() const {
-        for (std::size_t i = 0; i < N; ++i) {
-            m_results[i] = m_steps[i].func();
-        }
+        run_impl(std::index_sequence_for<Funcs...>{});
         m_executed = true;
     }
 
@@ -88,7 +84,7 @@ public:
      * @return true if the step succeeded, false if failed or not yet executed
      */
     bool result(std::size_t index) const noexcept {
-        if (index < N && m_executed) {
+        if (index < sizeof...(Funcs) && m_executed) {
             return m_results[index];
         }
         return false;
@@ -98,7 +94,7 @@ public:
      * @brief Get all results as an array
      * @return Array of all execution results
      */
-    const std::array<bool, N>& results() const noexcept {
+    const std::array<bool, sizeof...(Funcs)>& results() const noexcept {
         return m_results;
     }
 
@@ -108,7 +104,7 @@ public:
      */
     bool all_succeeded() const noexcept {
         if (!m_executed) return false;
-        for (std::size_t i = 0; i < N; ++i) {
+        for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
             if (!m_results[i]) return false;
         }
         return true;
@@ -120,7 +116,7 @@ public:
      */
     bool any_succeeded() const noexcept {
         if (!m_executed) return false;
-        for (std::size_t i = 0; i < N; ++i) {
+        for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
             if (m_results[i]) return true;
         }
         return false;
@@ -133,7 +129,7 @@ public:
     std::size_t success_count() const noexcept {
         if (!m_executed) return 0;
         std::size_t count = 0;
-        for (std::size_t i = 0; i < N; ++i) {
+        for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
             if (m_results[i]) ++count;
         }
         return count;
@@ -144,7 +140,7 @@ public:
      * @return Number of failed steps
      */
     std::size_t failure_count() const noexcept {
-        return m_executed ? (N - success_count()) : 0;
+        return m_executed ? (sizeof...(Funcs) - success_count()) : 0;
     }
 
     /**
@@ -153,24 +149,7 @@ public:
      * @return The error message for the given step, or empty string if out of bounds
      */
     std::string_view error_message(std::size_t index) const noexcept {
-        if (index < N) {
-            return m_steps[index].error_msg;
-        }
-        return "";
-    }
-
-    /**
-     * @brief Get the error message for a specific step by function pointer
-     * @param func Pointer to the std::function to look up
-     * @return The error message for the given step, or empty string if not found
-     */
-    std::string_view error_message(const std::function<bool()>* func) const noexcept {
-        for (std::size_t i = 0; i < N; ++i) {
-            if (&m_steps[i].func == func) {
-                return m_steps[i].error_msg;
-            }
-        }
-        return "";
+        return error_message_impl(index, std::index_sequence_for<Funcs...>{});
     }
 
     /**
@@ -179,26 +158,7 @@ public:
      * @return true if the step succeeded, false if it failed or index out of bounds
      */
     bool rerun(std::size_t index) const {
-        if (index < N) {
-            m_results[index] = m_steps[index].func();
-            return m_results[index];
-        }
-        return false;
-    }
-
-    /**
-     * @brief Rerun a specific step by function pointer
-     * @param func Pointer to the std::function to rerun
-     * @return true if the step succeeded, false if it failed or function not found
-     */
-    bool rerun(const std::function<bool()>* func) const {
-        for (std::size_t i = 0; i < N; ++i) {
-            if (&m_steps[i].func == func) {
-                m_results[i] = m_steps[i].func();
-                return m_results[i];
-            }
-        }
-        return false;
+        return rerun_impl(index, std::index_sequence_for<Funcs...>{});
     }
 
     /**
@@ -209,10 +169,9 @@ public:
         if (!m_executed) return 0;
         
         std::size_t success_count = 0;
-        for (std::size_t i = 0; i < N; ++i) {
+        for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
             if (!m_results[i]) {
-                m_results[i] = m_steps[i].func();
-                if (m_results[i]) {
+                if (rerun(i)) {
                     ++success_count;
                 }
             }
@@ -225,15 +184,36 @@ public:
      * @return Number of functions in the runner
      */
     static constexpr std::size_t size() noexcept {
-        return N;
+        return sizeof...(Funcs);
+    }
+
+private:
+    template<std::size_t... Is>
+    void run_impl(std::index_sequence<Is...>) const {
+        ((m_results[Is] = std::get<Is>(m_steps).first()), ...);
+    }
+
+    template<std::size_t... Is>
+    std::string_view error_message_impl(std::size_t index, std::index_sequence<Is...>) const noexcept {
+        std::string_view result = "";
+        (void)((Is == index ? (result = std::get<Is>(m_steps).second, true) : false) || ...);
+        return result;
+    }
+
+    template<std::size_t... Is>
+    bool rerun_impl(std::size_t index, std::index_sequence<Is...>) const {
+        bool result = false;
+        (void)((Is == index ? (m_results[index] = std::get<Is>(m_steps).first(), result = m_results[index], true) : false) || ...);
+        return result;
     }
 };
 
 /**
- * @brief Helper function to create a ParallelRunner with automatic size deduction
+ * @brief Helper function to create a ParallelRunner with automatic type deduction
  * 
- * This function allows you to create a ParallelRunner without explicitly specifying
- * the template parameter N. Use the parallel_step() helper function for clean syntax.
+ * This function allows you to create a ParallelRunner that stores each callable
+ * with its actual type, avoiding std::function overhead. Use the parallel_step() 
+ * helper function for clean syntax.
  * 
  * Example usage:
  * @code
@@ -247,6 +227,5 @@ public:
  */
 template<typename... Funcs>
 auto make_parallel_runner(parallel_runner_internal::StepWrapper<Funcs>&&... steps) {
-    constexpr std::size_t N = sizeof...(Funcs);
-    return ParallelRunner<N>{{typename ParallelRunner<N>::Step{std::move(steps.func), steps.error_msg}...}};
+    return ParallelRunner<Funcs...>{std::tuple<std::pair<Funcs, std::string_view>...>{std::make_pair(std::move(steps.func), steps.error_msg)...}};
 }

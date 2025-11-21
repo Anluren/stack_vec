@@ -43,6 +43,8 @@ int main() {
     );
     
     int failed_idx = runner1.run();
+   
+    std::cout << "size of runner1: " << sizeof(runner1) << "\n";
     
     if (failed_idx >= 0) {
         std::cout << "Failed at index: " << failed_idx << "\n\n";
@@ -59,6 +61,7 @@ int main() {
         step(start_server, "Failed to start server")
     );
     
+    std::cout << "size of startup: " << sizeof(startup) << "\n";
     std::cout << "Total startup steps: " << startup.size() << "\n";
     
     failed_idx = startup.run();
@@ -69,15 +72,17 @@ int main() {
         std::cout << "Startup completed successfully!\n\n";
     }
     
-    std::cout << "=== Example 3: Explicit template parameter (if you prefer) ===\n";
+    std::cout << "=== Example 3: Multiple independent steps ===\n";
     
-    FunctionRunner<3> tasks{{
-        {[]() { std::cout << "Task 1 complete\n"; return true; }, "Task 1 failed"},
-        {[]() { std::cout << "Task 2 complete\n"; return true; }, "Task 2 failed"},
-        {[]() { std::cout << "Task 3 complete\n"; return true; }, "Task 3 failed"}
-    }};
+    auto tasks = make_function_runner(
+        step([]() { std::cout << "Task 1 complete\n"; return true; }, "Task 1 failed"),
+        step([]() { std::cout << "Task 2 complete\n"; return true; }, "Task 2 failed"),
+        step([]() { std::cout << "Task 3 complete\n"; return true; }, "Task 3 failed")
+    );
     
     failed_idx = tasks.run();
+   
+    std::cout << "size of tasks: " << sizeof(tasks) << "\n";
     
     if (failed_idx >= 0) {
         std::cout << "Failed at index: " << failed_idx << "\n";
@@ -113,15 +118,12 @@ int main() {
         // Test index-based API
         std::cout << "Error message (by index): " << diagnostic_runner.error_message(result) << "\n";
         
-        // Test pointer-based API
-        std::cout << "Error message (by pointer): " << diagnostic_runner.error_message(&diagnostic_runner.m_steps[result].func) << "\n";
-        
         std::cout << "\nAttempting to rerun the failed step (by index)...\n";
         bool rerun_result = diagnostic_runner.rerun(result);
         std::cout << "Rerun result: " << (rerun_result ? "Success" : "Failed again") << "\n";
         
-        std::cout << "\nAttempting to rerun using pointer...\n";
-        rerun_result = diagnostic_runner.rerun(&diagnostic_runner.m_steps[result].func);
+        std::cout << "\nAttempting second rerun...\n";
+        rerun_result = diagnostic_runner.rerun(result);
         std::cout << "Rerun result: " << (rerun_result ? "Success" : "Failed again") << "\n";
     } else {
         std::cout << "All steps completed successfully!\n";

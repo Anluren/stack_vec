@@ -3,8 +3,9 @@
 #include <cstddef>
 #include <utility>
 #include <iostream>
-#include <functional>
 #include <string_view>
+#include <tuple>
+#include <type_traits>
 
 namespace function_runner_internal {
 
@@ -28,29 +29,29 @@ struct StepWrapper {
 } // namespace function_runner_internal
 
 template<typename Func>
-function_runner_internal::StepWrapper<Func> step(Func&& f, std::string_view msg) {
-    return function_runner_internal::StepWrapper<Func>{std::forward<Func>(f), msg};
+function_runner_internal::StepWrapper<std::decay_t<Func>> step(Func&& f, std::string_view msg) {
+    return function_runner_internal::StepWrapper<std::decay_t<Func>>{std::forward<Func>(f), msg};
 }
 
 /**
  * @brief A function runner that executes a fixed sequence of functions and tracks failures
  * 
- * This class manages a fixed-size array of functions paired with error messages.
- * When run, it executes each function sequentially until one fails or all succeed.
+ * This class stores each function with its actual type (no type erasure), providing
+ * zero-overhead execution with no heap allocations. Each function is stored inline.
  * 
  * Functions should return bool where:
  * - true = success, continue to next function
  * - false = failure, stop execution
  * 
- * @tparam N Number of functions to execute
+ * @tparam Funcs The types of callable objects to execute
  * 
  * Example usage:
  * @code
- * FunctionRunner<3> runner{{
- *     {[]() { return true; }, "Step 1 failed"},
- *     {[]() { return false; }, "Step 2 failed"},
- *     {[]() { return true; }, "Step 3 failed"}
- * }};
+ * auto runner = make_function_runner(
+ *     step([]() { return true; }, "Step 1 failed"),
+ *     step([]() { return false; }, "Step 2 failed"),
+ *     step([]() { return true; }, "Step 3 failed")
+ * );
  * 
  * int failed_idx = runner.run();
  * if (failed_idx >= 0) {
@@ -58,17 +59,11 @@ function_runner_internal::StepWrapper<Func> step(Func&& f, std::string_view msg)
  * }
  * @endcode
  */
-template<std::size_t N>
+template<typename... Funcs>
 class FunctionRunner {
 public:
-    /// Type for a function-message pair
-    struct Step {
-        std::function<bool()> func;
-        std::string_view error_msg;
-    };
-
-    /// Array of function steps
-    Step m_steps[N];
+    /// Tuple storing each function with its error message
+    std::tuple<std::pair<Funcs, std::string_view>...> m_steps;
     
     /// Index of the failed step, or -1 if no failure
     mutable int m_failed_step = -1;
@@ -82,14 +77,7 @@ public:
      * @return Index of the first failed function, or -1 if all succeeded
      */
     int run() const {
-        for (std::size_t i = 0; i < N; ++i) {
-            if (!m_steps[i].func()) {
-                m_failed_step = static_cast<int>(i);
-                return m_failed_step;
-            }
-        }
-        m_failed_step = -1;
-        return -1;
+        return run_impl(std::index_sequence_for<Funcs...>{});
     }
 
     /**
@@ -106,24 +94,7 @@ public:
      * @return The error message for the given step, or empty string if out of bounds
      */
     std::string_view error_message(std::size_t index) const noexcept {
-        if (index < N) {
-            return m_steps[index].error_msg;
-        }
-        return "";
-    }
-
-    /**
-     * @brief Get the error message for a specific step by function pointer
-     * @param func Pointer to the std::function to look up
-     * @return The error message for the given step, or empty string if not found
-     */
-    std::string_view error_message(const std::function<bool()>* func) const noexcept {
-        for (std::size_t i = 0; i < N; ++i) {
-            if (&m_steps[i].func == func) {
-                return m_steps[i].error_msg;
-            }
-        }
-        return "";
+        return error_message_impl(index, std::index_sequence_for<Funcs...>{});
     }
 
     /**
@@ -132,24 +103,7 @@ public:
      * @return true if the step succeeded, false if it failed or index out of bounds
      */
     bool rerun(std::size_t index) const {
-        if (index < N) {
-            return m_steps[index].func();
-        }
-        return false;
-    }
-
-    /**
-     * @brief Rerun a specific step by function pointer
-     * @param func Pointer to the std::function to rerun
-     * @return true if the step succeeded, false if it failed or function not found
-     */
-    bool rerun(const std::function<bool()>* func) const {
-        for (std::size_t i = 0; i < N; ++i) {
-            if (&m_steps[i].func == func) {
-                return m_steps[i].func();
-            }
-        }
-        return false;
+        return rerun_impl(index, std::index_sequence_for<Funcs...>{});
     }
 
     /**
@@ -157,15 +111,42 @@ public:
      * @return Number of functions in the runner
      */
     static constexpr std::size_t size() noexcept {
-        return N;
+        return sizeof...(Funcs);
+    }
+
+private:
+    template<std::size_t... Is>
+    int run_impl(std::index_sequence<Is...>) const {
+        int result = -1;
+        // Use fold expression with short-circuit evaluation
+        ((std::get<Is>(m_steps).first() || (m_failed_step = result = Is, false)) && ...);
+        if (result == -1) {
+            m_failed_step = -1;
+        }
+        return result;
+    }
+
+    template<std::size_t... Is>
+    std::string_view error_message_impl(std::size_t index, std::index_sequence<Is...>) const noexcept {
+        std::string_view result = "";
+        (void)((Is == index ? (result = std::get<Is>(m_steps).second, true) : false) || ...);
+        return result;
+    }
+
+    template<std::size_t... Is>
+    bool rerun_impl(std::size_t index, std::index_sequence<Is...>) const {
+        bool result = false;
+        (void)((Is == index ? (result = std::get<Is>(m_steps).first(), true) : false) || ...);
+        return result;
     }
 };
 
 /**
- * @brief Helper function to create a FunctionRunner with automatic size deduction
+ * @brief Helper function to create a FunctionRunner with automatic type deduction
  * 
- * This function allows you to create a FunctionRunner without explicitly specifying
- * the template parameter N. Use the step() helper function for clean syntax.
+ * This function allows you to create a FunctionRunner that stores each callable
+ * with its actual type, avoiding std::function overhead. Use the step() helper 
+ * function for clean syntax.
  * 
  * Example usage:
  * @code
@@ -179,8 +160,7 @@ public:
  */
 template<typename... Funcs>
 auto make_function_runner(function_runner_internal::StepWrapper<Funcs>&&... steps) {
-    constexpr std::size_t N = sizeof...(Funcs);
-    return FunctionRunner<N>{{typename FunctionRunner<N>::Step{std::move(steps.func), steps.error_msg}...}};
+    return FunctionRunner<Funcs...>{std::tuple<std::pair<Funcs, std::string_view>...>{std::make_pair(std::move(steps.func), steps.error_msg)...}};
 }
 
 

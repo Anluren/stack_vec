@@ -106,12 +106,12 @@ int main() {
         }
     }
     
-    std::cout << "\n=== Example 4: Explicit template parameter ===\n";
+    std::cout << "\n=== Example 4: Results array access ===\n";
     
-    ParallelRunner<2> explicit_runner{{
-        {[]() { std::cout << "Task 1\n"; return true; }, "Task 1 failed"},
-        {[]() { std::cout << "Task 2\n"; return true; }, "Task 2 failed"}
-    }};
+    auto explicit_runner = make_parallel_runner(
+        parallel_step([]() { std::cout << "Task 1\n"; return true; }, "Task 1 failed"),
+        parallel_step([]() { std::cout << "Task 2\n"; return true; }, "Task 2 failed")
+    );
     
     explicit_runner.run();
     
