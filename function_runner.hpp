@@ -178,10 +178,9 @@ public:
  * @endcode
  */
 template<typename... Funcs>
-auto make_function_runner(function_runner_internal::StepWrapper<Funcs>... steps) {
+auto make_function_runner(function_runner_internal::StepWrapper<Funcs>&&... steps) {
     constexpr std::size_t N = sizeof...(Funcs);
-    return FunctionRunner<N>{{typename FunctionRunner<N>::Step{steps.func, steps.error_msg}...}};
+    return FunctionRunner<N>{{typename FunctionRunner<N>::Step{std::move(steps.func), steps.error_msg}...}};
 }
-
 
 

@@ -246,8 +246,7 @@ public:
  * @endcode
  */
 template<typename... Funcs>
-auto make_parallel_runner(parallel_runner_internal::StepWrapper<Funcs>... steps) {
+auto make_parallel_runner(parallel_runner_internal::StepWrapper<Funcs>&&... steps) {
     constexpr std::size_t N = sizeof...(Funcs);
-    return ParallelRunner<N>{{typename ParallelRunner<N>::Step{steps.func, steps.error_msg}...}};
+    return ParallelRunner<N>{{typename ParallelRunner<N>::Step{std::move(steps.func), steps.error_msg}...}};
 }
-
