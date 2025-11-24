@@ -26,11 +26,15 @@ struct StepWrapper {
     std::string_view error_msg;
 };
 
+// Deduction guide for CTAD
+template<typename Func>
+StepWrapper(Func, std::string_view) -> StepWrapper<std::decay_t<Func>>;
+
 } // namespace function_runner_internal
 
 template<typename Func>
-function_runner_internal::StepWrapper<std::decay_t<Func>> step(Func&& f, std::string_view msg) {
-    return function_runner_internal::StepWrapper<std::decay_t<Func>>{std::forward<Func>(f), msg};
+auto step(Func&& f, std::string_view msg) {
+    return function_runner_internal::StepWrapper{std::forward<Func>(f), msg};
 }
 
 /**

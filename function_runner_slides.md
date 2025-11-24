@@ -2,6 +2,18 @@
 marp: true
 theme: default
 paginate: true
+style: |
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .smaller-text {
+    font-size: 0.85em;
+  }
+  .smaller-text pre {
+    font-size: 0.75em;
+  }
 ---
 
 # Function Runners
@@ -407,6 +419,97 @@ Each gets its own type preserved:
 - `std::bind` result type stored directly
 - Lambda type stored directly
 - No conversion to `std::function`
+
+---
+
+## How Lambdas Become Machine Code
+
+### Lambda to Class Translation
+
+```cpp
+// What you write:
+auto lambda = [x = 42](int y) { return x + y; };
+
+// What the compiler generates:
+class __lambda_unique {
+    int x;  // Captured variable → member
+public:
+    __lambda_unique(int _x) : x(_x) {}
+    int operator()(int y) const { return x + y; }
+};
+```
+
+Every lambda gets a **unique type**, even if identical!
+
+---
+
+## Lambda Compilation: Captures
+
+<div class="columns">
+<div>
+
+### By Value
+```cpp
+int x = 42;
+auto f = [x]() { 
+    return x; 
+};
+```
+
+**Assembly:**
+```asm
+mov DWORD PTR [closure], 42
+; Copy x into closure
+
+mov eax, DWORD PTR [closure]
+; Load x when calling
+```
+
+</div>
+<div>
+
+### By Reference
+```cpp
+int x = 42;
+auto f = [&x]() { 
+    return x; 
+};
+```
+
+**Assembly:**
+```asm
+mov QWORD PTR [closure], rsi
+; Store pointer to x
+
+mov rax, QWORD PTR [closure]
+; Load pointer
+mov eax, DWORD PTR [rax]
+; Dereference
+```
+
+</div>
+</div>
+
+---
+
+## Lambda Compilation: Stateless Lambda
+
+```cpp
+auto f = [](int x) { return x * 2; };
+```
+
+**Special optimization:**
+- Empty class (1 byte size)
+- Can convert to function pointer
+- Compiler can inline completely
+
+```asm
+; After inlining:
+lea eax, [rdi + rdi]  ; x * 2, direct computation
+ret
+```
+
+No closure object needed at all!
 
 ---
 
