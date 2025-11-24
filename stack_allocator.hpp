@@ -1,33 +1,34 @@
 #ifndef STACK_ALLOCATOR_HPP
 #define STACK_ALLOCATOR_HPP
 
+#include <cassert>
 #include <cstddef>
 #include <memory>
 #include <type_traits>
 #include <vector>
-#include <cassert>
 
 namespace stack_alloc_internal {
 
 /**
  * @brief A custom allocator that uses a fixed-size buffer for allocations.
- * 
+ *
  * This allocator owns a fixed-size buffer and allocates memory from it sequentially.
  * It's designed for use cases where heap allocation overhead should be avoided.
- * 
+ *
  * @tparam T The type of objects to allocate
  * @tparam N The size of the buffer in bytes
  * @tparam AlignAccess Whether to enforce alignment (default: true)
- * 
- * @note When AlignAccess is false, allocations are packed without padding for maximum space efficiency
+ *
+ * @note When AlignAccess is false, allocations are packed without padding for maximum space
+ * efficiency
  * @note This allocator does not throw exceptions; allocation failures return nullptr
  * @note Each allocator instance owns its own buffer
  * @note This is an implementation detail - use StackVector for the public interface
  * @warning This class is in the detail namespace and should not be used directly
  */
-template<typename T, std::size_t N, bool AlignAccess = true>
+template <typename T, std::size_t N, bool AlignAccess = true>
 class StackAllocator {
-public:
+   public:
     using value_type = T;
     using pointer = T*;
     using const_pointer = const T*;
@@ -36,62 +37,56 @@ public:
     using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
 
-    template<typename U>
+    template <typename U>
     struct rebind {
         using other = StackAllocator<U, N, AlignAccess>;
     };
 
     /**
      * @brief Default constructor
-     * 
+     *
      * Initializes the allocator with an empty buffer (offset = 0)
      */
-    StackAllocator() noexcept 
-        : m_offset(0) {
-    }
+    StackAllocator() noexcept : m_offset(0) {}
 
     /**
      * @brief Copy constructor
-     * 
+     *
      * Creates a new allocator with its own buffer. Does not copy the buffer contents.
      * Required by C++ allocator requirements for use with std::vector.
-     * 
+     *
      * @param other The allocator to copy from (only used for type compatibility)
      * @note Each allocator instance has its own independent buffer
      */
-    StackAllocator(const StackAllocator&) noexcept
-        : m_offset(0) {
-    }
+    StackAllocator(const StackAllocator&) noexcept : m_offset(0) {}
 
     /**
      * @brief Rebind copy constructor
-     * 
+     *
      * Allows conversion from allocators of different types with the same buffer size.
      * Creates a new allocator with its own buffer.
-     * 
+     *
      * @tparam U The value type of the other allocator
      * @param other The allocator to convert from
      */
-    template<typename U>
-    StackAllocator(const StackAllocator<U, N, AlignAccess>&) noexcept
-        : m_offset(0) {
-    }
+    template <typename U>
+    StackAllocator(const StackAllocator<U, N, AlignAccess>&) noexcept : m_offset(0) {}
 
     /**
      * @brief Allocate memory for n objects of type T
-     * 
+     *
      * Allocates memory from the fixed-size buffer. If AlignAccess is true,
      * the allocation will be properly aligned for type T.
-     * 
+     *
      * @param n Number of objects to allocate
      * @return Pointer to allocated memory, or nullptr if allocation fails
-     * 
+     *
      * @note This function never throws. On failure, it asserts in debug builds and returns nullptr.
      * @note Allocations are made sequentially from the buffer
      */
     pointer allocate(size_type n) noexcept {
         const size_type bytes_needed = n * sizeof(T);
-        
+
         if (m_offset + bytes_needed > N) {
             // Out of buffer space - return nullptr instead of throwing
             assert(false && "StackAllocator: buffer overflow");
@@ -100,20 +95,20 @@ public:
 
         pointer result = reinterpret_cast<pointer>(reinterpret_cast<char*>(&m_buffer) + m_offset);
         m_offset += bytes_needed;
-        
+
         return result;
     }
 
     /**
      * @brief Deallocate memory previously allocated
-     * 
+     *
      * This implementation only reclaims space if the deallocation matches the most recent
      * allocation (stack-like behavior). Otherwise, the space remains used until the allocator
      * is destroyed.
-     * 
+     *
      * @param p Pointer to the memory to deallocate
      * @param n Number of objects being deallocated
-     * 
+     *
      * @note This function never throws
      */
     void deallocate(pointer p, size_type n) noexcept {
@@ -121,11 +116,11 @@ public:
         // The buffer is freed when it goes out of scope
         // We could implement a simple stack-like deallocation if the pointer
         // matches the last allocation
-        
+
         const char* ptr_as_char = reinterpret_cast<const char*>(p);
         const size_type bytes = n * sizeof(T);
         char* buffer_ptr = reinterpret_cast<char*>(&m_buffer);
-        
+
         // If this was the last allocation, we can reclaim the space
         if (ptr_as_char + bytes == buffer_ptr + m_offset) {
             m_offset = ptr_as_char - buffer_ptr;
@@ -134,111 +129,104 @@ public:
 
     /**
      * @brief Compare allocators for equality
-     * 
+     *
      * Two allocators are equal if they refer to the same buffer.
-     * 
+     *
      * @tparam U Value type of the other allocator
      * @tparam M Buffer size of the other allocator
      * @tparam A AlignAccess setting of the other allocator
      * @param other The allocator to compare with
      * @return true if allocators share the same buffer, false otherwise
      */
-    template<typename U, std::size_t M, bool A>
+    template <typename U, std::size_t M, bool A>
     bool operator==(const StackAllocator<U, M, A>& other) const noexcept {
         return &m_buffer == &other.m_buffer;
     }
 
     /**
      * @brief Compare allocators for inequality
-     * 
+     *
      * @tparam U Value type of the other allocator
      * @tparam M Buffer size of the other allocator
      * @tparam A AlignAccess setting of the other allocator
      * @param other The allocator to compare with
      * @return true if allocators don't share the same buffer, false otherwise
      */
-    template<typename U, std::size_t M, bool A>
+    template <typename U, std::size_t M, bool A>
     bool operator!=(const StackAllocator<U, M, A>& other) const noexcept {
         return !(*this == other);
     }
 
     // Allow access to private members for rebind
-    template<typename, std::size_t, bool>
+    template <typename, std::size_t, bool>
     friend class StackAllocator;
 
-private:
+   private:
     /// Fixed-size buffer for allocations (aligned or unaligned based on AlignAccess)
-    typename std::conditional<AlignAccess,
-        typename std::aligned_storage<N, alignof(T)>::type,
-        char[N]>::type m_buffer;
+    typename std::conditional<AlignAccess, typename std::aligned_storage<N, alignof(T)>::type,
+                              char[N]>::type m_buffer;
     /// Current offset into the buffer for next allocation
     size_type m_offset;
 };
 
-} // namespace detail
+}  // namespace stack_alloc_internal
 
 /**
  * @brief Helper wrapper around std::vector with StackAllocator
- * 
+ *
  * This class provides a convenient interface for using std::vector with a fixed-size
  * buffer allocator. It automatically reserves the full capacity on construction to
  * prevent reallocations.
- * 
+ *
  * @tparam T The type of elements in the vector
  * @tparam N The maximum number of elements (not bytes)
  * @tparam AlignAccess Whether to enforce alignment (default: false for max efficiency)
- * 
+ *
  * @note This class is not copyable (copy constructor and assignment are deleted)
  * @note Move operations are supported
  * @note Capacity is fixed at N elements
  */
-template<typename T, std::size_t N, bool AlignAccess = false>
+template <typename T, std::size_t N, bool AlignAccess = false>
 class StackVector {
-public:
+   public:
     using allocator_type = stack_alloc_internal::StackAllocator<T, N * sizeof(T), AlignAccess>;
     using vector_type = std::vector<T, allocator_type>;
 
     /**
      * @brief Default constructor
-     * 
+     *
      * Creates a StackVector and reserves the full capacity upfront to prevent
      * reallocations that would exceed the fixed buffer size.
      */
-    StackVector() 
-        : m_alloc{}
-        , m_vec{m_alloc} {
+    StackVector() : m_alloc{}, m_vec{m_alloc} {
         // Reserve the full capacity upfront to avoid reallocations
         m_vec.reserve(N);
     }
 
     /**
      * @brief Constructor from initializer list
-     * 
+     *
      * Creates a StackVector and initializes it with elements from an initializer list.
-     * 
+     *
      * @param init Initializer list of elements
      */
-    StackVector(std::initializer_list<T> init)
-        : m_alloc{}
-        , m_vec{init, m_alloc} {
+    StackVector(std::initializer_list<T> init) : m_alloc{}, m_vec{init, m_alloc} {
         // Vector is already constructed with the initializer list elements
     }
 
     /**
      * @brief Constructor to fill with n copies of value
-     * 
+     *
      * Creates a StackVector and fills it with n copies of the given value.
-     * 
+     *
      * @param count Number of elements to create
      * @param value Value to copy into each element
-     * 
+     *
      * @note Must be called with parentheses, not braces:
      *       StackVector<int, 10> vec(5, 42);  // 5 copies of 42
      *       StackVector<int, 10> vec{5, 42};  // initializer_list with 2 elements!
      */
-    StackVector(std::size_t count, const T& value)
-        : m_alloc{}
-        , m_vec{count, value, m_alloc} {
+    StackVector(std::size_t count, const T& value) : m_alloc{}, m_vec{count, value, m_alloc} {
         // Vector is already constructed with count copies of value
     }
 
@@ -257,7 +245,7 @@ public:
      * @return Reference to the internal vector
      */
     vector_type& get() noexcept { return m_vec; }
-    
+
     /**
      * @brief Get const reference to the underlying std::vector
      * @return Const reference to the internal vector
@@ -265,41 +253,44 @@ public:
     const vector_type& get() const noexcept { return m_vec; }
 
     // Convenience forwarding methods
-    
+
     /** @brief Add element to the end (copy) */
-    void push_back(const T& value) noexcept(noexcept(std::declval<vector_type>().push_back(value))) { 
-        m_vec.push_back(value); 
+    void push_back(const T& value) noexcept(
+        noexcept(std::declval<vector_type>().push_back(value))) {
+        m_vec.push_back(value);
     }
-    
+
     /** @brief Add element to the end (move) */
-    void push_back(T&& value) noexcept(noexcept(std::declval<vector_type>().push_back(std::move(value)))) { 
-        m_vec.push_back(std::move(value)); 
+    void push_back(T&& value) noexcept(
+        noexcept(std::declval<vector_type>().push_back(std::move(value)))) {
+        m_vec.push_back(std::move(value));
     }
-    
+
     /**
      * @brief Construct element in-place at the end
      * @tparam Args Types of arguments to forward to T's constructor
      * @param args Arguments to forward to T's constructor
      */
-    template<typename... Args>
-    void emplace_back(Args&&... args) noexcept(noexcept(std::declval<vector_type>().emplace_back(std::forward<Args>(args)...))) {
+    template <typename... Args>
+    void emplace_back(Args&&... args) noexcept(
+        noexcept(std::declval<vector_type>().emplace_back(std::forward<Args>(args)...))) {
         m_vec.emplace_back(std::forward<Args>(args)...);
     }
 
     /**
      * @brief Insert multiple elements from array (for integer types only)
-     * 
+     *
      * This method is specifically for integer types and allows inserting
      * multiple elements from a C-style array in one call.
-     * 
+     *
      * @param data Pointer to array of elements to insert
      * @param count Number of elements to insert
-     * 
+     *
      * @note Only available when T is an integral type
      */
-    template<typename U = T>
-    std::enable_if_t<std::is_integral<U>::value, void>
-    insert_range(const T* data, std::size_t count) noexcept {
+    template <typename U = T>
+    std::enable_if_t<std::is_integral<U>::value, void> insert_range(const T* data,
+                                                                    std::size_t count) noexcept {
         for (std::size_t i = 0; i < count; ++i) {
             m_vec.push_back(data[i]);
         }
@@ -339,11 +330,11 @@ public:
     /** @brief Get const pointer to underlying data */
     const T* data() const noexcept { return m_vec.data(); }
 
-private:
+   private:
     /// The allocator instance that owns the fixed-size buffer
     allocator_type m_alloc;
     /// The vector using the stack allocator
     vector_type m_vec;
 };
 
-#endif // STACK_ALLOCATOR_HPP
+#endif  // STACK_ALLOCATOR_HPP
