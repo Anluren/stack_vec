@@ -43,20 +43,20 @@ int main() {
     std::cout << "=== Example 1: Using make_function_runner (no template parameter needed) ===\n";
     
     auto runner1 = make_function_runner(
-        step([]() -> bool {
+        []() -> bool {
             std::cout << "Running check 1...\n";
             return true;
-        }, "Check 1 failed: initialization error"),
+        }, "Check 1 failed: initialization error",
         
-        step([]() -> bool {
+        []() -> bool {
             std::cout << "Running check 2...\n";
             return false;  // This will fail
-        }, "Check 2 failed: validation error"),
+        }, "Check 2 failed: validation error",
         
-        step([]() -> bool {
+        []() -> bool {
             std::cout << "Running check 3...\n";
             return true;
-        }, "Check 3 failed: connection error")
+        }, "Check 3 failed: connection error"
     );
     
     int failed_idx = runner1.run();
@@ -72,10 +72,10 @@ int main() {
     std::cout << "=== Example 2: System startup sequence ===\n";
     
     auto startup = make_function_runner(
-        step(initialize_system, "Failed to initialize system"),
-        step(connect_to_database, "Failed to connect to database"),
-        step(load_configuration, "Failed to load configuration"),
-        step(start_server, "Failed to start server")
+        initialize_system, "Failed to initialize system",
+        connect_to_database, "Failed to connect to database",
+        load_configuration, "Failed to load configuration",
+        start_server, "Failed to start server"
     );
     
     std::cout << "size of startup: " << sizeof(startup) << "\n";
@@ -92,9 +92,9 @@ int main() {
     std::cout << "=== Example 3: Multiple independent steps ===\n";
     
     auto tasks = make_function_runner(
-        step([]() { std::cout << "Task 1 complete\n"; return true; }, "Task 1 failed"),
-        step([]() { std::cout << "Task 2 complete\n"; return true; }, "Task 2 failed"),
-        step([]() { std::cout << "Task 3 complete\n"; return true; }, "Task 3 failed")
+        []() { std::cout << "Task 1 complete\n"; return true; }, "Task 1 failed",
+        []() { std::cout << "Task 2 complete\n"; return true; }, "Task 2 failed",
+        []() { std::cout << "Task 3 complete\n"; return true; }, "Task 3 failed"
     );
     
     failed_idx = tasks.run();
@@ -110,20 +110,20 @@ int main() {
     std::cout << "\n=== Example 4: Using failed_step(), error_message(), and rerun() APIs ===\n";
     
     auto diagnostic_runner = make_function_runner(
-        step([]() -> bool {
+        []() -> bool {
             std::cout << "Step A: Pre-flight check...\n";
             return true;
-        }, "Pre-flight check failed"),
+        }, "Pre-flight check failed",
         
-        step([]() -> bool {
+        []() -> bool {
             std::cout << "Step B: Network connection...\n";
             return false;  // This will fail
-        }, "Network connection failed"),
+        }, "Network connection failed",
         
-        step([]() -> bool {
+        []() -> bool {
             std::cout << "Step C: Final verification...\n";
             return true;
-        }, "Final verification failed")
+        }, "Final verification failed"
     );
     
     int result = diagnostic_runner.run();
@@ -149,14 +149,14 @@ int main() {
     std::cout << "\n=== Example 5: Using std::bind with functions that have arguments ===\n";
     
     auto bind_runner = make_function_runner(
-        step(std::bind(connect_to_server, "localhost", 8080), 
-             "Server connection failed"),
+        std::bind(connect_to_server, "localhost", 8080), 
+        "Server connection failed",
         
-        step(std::bind(validate_range, 42, 0, 100), 
-             "Range validation failed"),
+        std::bind(validate_range, 42, 0, 100), 
+        "Range validation failed",
         
-        step(std::bind(authenticate_user, "admin", "secret"), 
-             "Authentication failed")
+        std::bind(authenticate_user, "admin", "secret"), 
+        "Authentication failed"
     );
     
     result = bind_runner.run();
@@ -175,14 +175,14 @@ int main() {
     int value = 75;
     
     auto lambda_runner = make_function_runner(
-        step([&](){ return connect_to_server(host, port); }, 
-             "Server connection failed"),
+        [&](){ return connect_to_server(host, port); }, 
+        "Server connection failed",
         
-        step([&](){ return validate_range(value, 0, 100); }, 
-             "Range validation failed"),
+        [&](){ return validate_range(value, 0, 100); }, 
+        "Range validation failed",
         
-        step([](){ return authenticate_user("admin", "secret"); }, 
-             "Authentication failed")
+        [](){ return authenticate_user("admin", "secret"); }, 
+        "Authentication failed"
     );
     
     result = lambda_runner.run();
@@ -192,6 +192,28 @@ int main() {
                   << lambda_runner.error_message(result) << "\n";
     } else {
         std::cout << "All steps with lambda captures succeeded!\n";
+    }
+    
+    std::cout << "\n=== Example 7: Clean syntax demonstration ===\n";
+    
+    auto direct_runner = make_function_runner(
+        []() { std::cout << "Direct step 1\n"; return true; }, 
+        "Direct step 1 failed",
+        
+        []() { std::cout << "Direct step 2\n"; return false; }, 
+        "Direct step 2 failed",
+        
+        []() { std::cout << "Direct step 3\n"; return true; }, 
+        "Direct step 3 failed"
+    );
+    
+    result = direct_runner.run();
+    
+    if (result >= 0) {
+        std::cout << "Failed at step " << result << ": " 
+                  << direct_runner.error_message(result) << "\n";
+    } else {
+        std::cout << "All direct steps succeeded!\n";
     }
     
     return 0;

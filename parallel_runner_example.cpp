@@ -43,20 +43,20 @@ int main() {
     std::cout << "=== Example 1: Basic parallel execution ===\n";
     
     auto runner1 = make_parallel_runner(
-        parallel_step([]() -> bool {
+        []() -> bool {
             std::cout << "Validation 1...\n";
             return true;
-        }, "Validation 1 failed"),
+        }, "Validation 1 failed",
         
-        parallel_step([]() -> bool {
+        []() -> bool {
             std::cout << "Validation 2...\n";
             return false;
-        }, "Validation 2 failed"),
+        }, "Validation 2 failed",
         
-        parallel_step([]() -> bool {
+        []() -> bool {
             std::cout << "Validation 3...\n";
             return true;
-        }, "Validation 3 failed")
+        }, "Validation 3 failed"
     );
     
     runner1.run();
@@ -81,10 +81,10 @@ int main() {
     std::cout << "\n=== Example 2: System health checks ===\n";
     
     auto health_checks = make_parallel_runner(
-        parallel_step(check_disk_space, "Insufficient disk space"),
-        parallel_step(check_memory, "Insufficient memory"),
-        parallel_step(check_network, "Network unavailable"),
-        parallel_step(check_permissions, "Permission denied")
+        check_disk_space, "Insufficient disk space",
+        check_memory, "Insufficient memory",
+        check_network, "Network unavailable",
+        check_permissions, "Permission denied"
     );
     
     health_checks.run();
@@ -104,9 +104,9 @@ int main() {
     std::cout << "\n=== Example 3: Rerun failed checks ===\n";
     
     auto checks = make_parallel_runner(
-        parallel_step([]() { std::cout << "Check A\n"; return true; }, "Check A failed"),
-        parallel_step([]() { std::cout << "Check B\n"; return false; }, "Check B failed"),
-        parallel_step([]() { std::cout << "Check C\n"; return false; }, "Check C failed")
+        []() { std::cout << "Check A\n"; return true; }, "Check A failed",
+        []() { std::cout << "Check B\n"; return false; }, "Check B failed",
+        []() { std::cout << "Check C\n"; return false; }, "Check C failed"
     );
     
     checks.run();
@@ -126,8 +126,8 @@ int main() {
     std::cout << "\n=== Example 4: Results array access ===\n";
     
     auto explicit_runner = make_parallel_runner(
-        parallel_step([]() { std::cout << "Task 1\n"; return true; }, "Task 1 failed"),
-        parallel_step([]() { std::cout << "Task 2\n"; return true; }, "Task 2 failed")
+        []() { std::cout << "Task 1\n"; return true; }, "Task 1 failed",
+        []() { std::cout << "Task 2\n"; return true; }, "Task 2 failed"
     );
     
     explicit_runner.run();
@@ -144,20 +144,20 @@ int main() {
     
     int retry_count = 0;
     auto retry_runner = make_parallel_runner(
-        parallel_step([&]() { 
+        [&]() { 
             std::cout << "Flaky check 1 (attempt " << ++retry_count << ")\n"; 
             return retry_count >= 2;  // Succeeds on second try
-        }, "Flaky check 1 failed"),
+        }, "Flaky check 1 failed",
         
-        parallel_step([]() { 
+        []() { 
             std::cout << "Always succeeds\n"; 
             return true; 
-        }, "Should not fail"),
+        }, "Should not fail",
         
-        parallel_step([]() { 
+        []() { 
             std::cout << "Always fails\n"; 
             return false; 
-        }, "Always fails")
+        }, "Always fails"
     );
     
     retry_runner.run();
@@ -185,20 +185,20 @@ int main() {
     std::cout << "\n=== Example 6: Using std::bind with parallel checks ===\n";
     
     auto bind_runner = make_parallel_runner(
-        parallel_step(std::bind(check_port_open, 80), 
-                     "Port 80 check failed"),
+        std::bind(check_port_open, 80), 
+        "Port 80 check failed",
         
-        parallel_step(std::bind(check_port_open, 22), 
-                     "Port 22 check failed"),
+        std::bind(check_port_open, 22), 
+        "Port 22 check failed",
         
-        parallel_step(std::bind(check_file_exists, "/etc/config.ini"), 
-                     "Config file check failed"),
+        std::bind(check_file_exists, "/etc/config.ini"), 
+        "Config file check failed",
         
-        parallel_step(std::bind(check_service_running, "nginx"), 
-                     "Nginx service check failed"),
+        std::bind(check_service_running, "nginx"), 
+        "Nginx service check failed",
         
-        parallel_step(std::bind(check_service_running, "apache"), 
-                     "Apache service check failed")
+        std::bind(check_service_running, "apache"), 
+        "Apache service check failed"
     );
     
     bind_runner.run();
@@ -224,17 +224,17 @@ int main() {
     std::string config = "/etc/config.ini";
     
     auto lambda_runner = make_parallel_runner(
-        parallel_step([&](){ return check_port_open(http_port); }, 
-                     "HTTP port check failed"),
+        [&](){ return check_port_open(http_port); }, 
+        "HTTP port check failed",
         
-        parallel_step([&](){ return check_port_open(ssh_port); }, 
-                     "SSH port check failed"),
+        [&](){ return check_port_open(ssh_port); }, 
+        "SSH port check failed",
         
-        parallel_step([&](){ return check_file_exists(config); }, 
-                     "Config file check failed"),
+        [&](){ return check_file_exists(config); }, 
+        "Config file check failed",
         
-        parallel_step([](){ return check_service_running("nginx"); }, 
-                     "Nginx service check failed")
+        [](){ return check_service_running("nginx"); }, 
+        "Nginx service check failed"
     );
     
     lambda_runner.run();
@@ -244,6 +244,35 @@ int main() {
     std::cout << "  Any succeeded: " << (lambda_runner.any_succeeded() ? "Yes" : "No") << "\n";
     std::cout << "  Success rate: " << lambda_runner.success_count() << "/" 
               << lambda_runner.size() << "\n";
+    
+    std::cout << "\n=== Example 8: Clean syntax demonstration ===\n";
+    
+    auto direct_runner = make_parallel_runner(
+        []() { std::cout << "Direct check 1\n"; return true; }, 
+        "Direct check 1 failed",
+        
+        []() { std::cout << "Direct check 2\n"; return false; }, 
+        "Direct check 2 failed",
+        
+        []() { std::cout << "Direct check 3\n"; return true; }, 
+        "Direct check 3 failed"
+    );
+    
+    direct_runner.run();
+    
+    std::cout << "\nDirect runner results:\n";
+    std::cout << "  Success: " << direct_runner.success_count() << "/" 
+              << direct_runner.size() << "\n";
+    
+    if (!direct_runner.all_succeeded()) {
+        std::cout << "\nFailed checks:\n";
+        for (std::size_t i = 0; i < direct_runner.size(); ++i) {
+            if (!direct_runner.result(i)) {
+                std::cout << "  - Step " << i << ": " 
+                          << direct_runner.error_message(i) << "\n";
+            }
+        }
+    }
     
     return 0;
 }

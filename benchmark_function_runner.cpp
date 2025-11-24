@@ -27,21 +27,21 @@ int main() {
     
     // Simple lambdas with no captures
     auto runner = make_function_runner(
-        step([]() { return true; }, "Step 1 failed"),
-        step([]() { return true; }, "Step 2 failed"),
-        step([]() { return true; }, "Step 3 failed"),
-        step([]() { return true; }, "Step 4 failed"),
-        step([]() { return true; }, "Step 5 failed")
+        []() { return true; }, "Step 1 failed",
+        []() { return true; }, "Step 2 failed",
+        []() { return true; }, "Step 3 failed",
+        []() { return true; }, "Step 4 failed",
+        []() { return true; }, "Step 5 failed"
     );
     
     // Lambdas with captures
     int counter = 0;
     auto runner_with_captures = make_function_runner(
-        step([&counter]() { counter++; return true; }, "Step 1 failed"),
-        step([&counter]() { counter++; return true; }, "Step 2 failed"),
-        step([&counter]() { counter++; return true; }, "Step 3 failed"),
-        step([&counter]() { counter++; return true; }, "Step 4 failed"),
-        step([&counter]() { counter++; return true; }, "Step 5 failed")
+        [&counter]() { counter++; return true; }, "Step 1 failed",
+        [&counter]() { counter++; return true; }, "Step 2 failed",
+        [&counter]() { counter++; return true; }, "Step 3 failed",
+        [&counter]() { counter++; return true; }, "Step 4 failed",
+        [&counter]() { counter++; return true; }, "Step 5 failed"
     );
     
     std::cout << "Test 1: Simple lambdas (5 steps, all succeed)\n";

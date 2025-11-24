@@ -22,12 +22,46 @@ struct StepWrapper {
 template<typename Func>
 StepWrapper(Func, std::string_view) -> StepWrapper<std::decay_t<Func>>;
 
-} // namespace parallel_runner_internal
+// Type trait to detect if a type is a StepWrapper
+template<typename T>
+struct is_step_wrapper : std::false_type {};
 
 template<typename Func>
-auto parallel_step(Func&& f, std::string_view msg) {
-    return parallel_runner_internal::StepWrapper{std::forward<Func>(f), msg};
+struct is_step_wrapper<StepWrapper<Func>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_step_wrapper_v = is_step_wrapper<std::decay_t<T>>::value;
+
+// Helper to extract even-indexed arguments (functions)
+template<std::size_t... Is, typename... Args>
+auto extract_funcs(std::index_sequence<Is...>, Args&&... args) {
+    auto all_args = std::forward_as_tuple(std::forward<Args>(args)...);
+    return std::make_tuple(std::get<Is * 2>(std::move(all_args))...);
 }
+
+// Helper to extract odd-indexed arguments (error messages)
+template<std::size_t... Is, typename... Args>
+auto extract_msgs(std::index_sequence<Is...>, Args&&... args) {
+    auto all_args = std::forward_as_tuple(std::forward<Args>(args)...);
+    return std::make_tuple(std::get<Is * 2 + 1>(std::move(all_args))...);
+}
+
+// Helper to create pairs from two tuples
+template<typename FuncsTuple, typename MsgsTuple, std::size_t... Is>
+auto make_pairs_impl(FuncsTuple&& funcs, MsgsTuple&& msgs, std::index_sequence<Is...>) {
+    return std::make_tuple(std::make_pair(std::get<Is>(std::forward<FuncsTuple>(funcs)), 
+                                          std::get<Is>(std::forward<MsgsTuple>(msgs)))...);
+}
+
+template<typename FuncsTuple, typename MsgsTuple>
+auto make_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs) {
+    constexpr auto N = std::tuple_size_v<std::decay_t<FuncsTuple>>;
+    return make_pairs_impl(std::forward<FuncsTuple>(funcs), 
+                          std::forward<MsgsTuple>(msgs), 
+                          std::make_index_sequence<N>{});
+}
+
+} // namespace parallel_runner_internal
 
 /**
  * @brief A parallel runner that executes all functions and stores their results
@@ -212,24 +246,58 @@ private:
     }
 };
 
+namespace parallel_runner_internal {
+
+// Helper to construct ParallelRunner from extracted tuples
+template<typename FuncsTuple, typename MsgsTuple, std::size_t... Is>
+auto make_runner_from_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs, std::index_sequence<Is...>) {
+    auto pairs = make_pairs(std::forward<FuncsTuple>(funcs), std::forward<MsgsTuple>(msgs));
+    using RunnerType = ParallelRunner<std::decay_t<decltype(std::get<Is>(funcs))>...>;
+    return RunnerType{std::move(pairs)};
+}
+
+} // namespace parallel_runner_internal
+
 /**
  * @brief Helper function to create a ParallelRunner with automatic type deduction
  * 
  * This function allows you to create a ParallelRunner that stores each callable
- * with its actual type, avoiding std::function overhead. Use the parallel_step() 
- * helper function for clean syntax.
+ * with its actual type, avoiding std::function overhead. You can either use 
+ * parallel_step() wrappers or pass functions and error messages as alternating arguments.
  * 
- * Example usage:
+ * Example usage with parallel_step():
  * @code
  * auto runner = make_parallel_runner(
  *     parallel_step([]() { return true; }, "Step 1 failed"),
- *     parallel_step([]() { return false; }, "Step 2 failed"),
- *     parallel_step([]() { return true; }, "Step 3 failed")
+ *     parallel_step([]() { return false; }, "Step 2 failed")
  * );
- * runner.run();
+ * @endcode
+ * 
+ * Example usage without parallel_step():
+ * @code
+ * auto runner = make_parallel_runner(
+ *     []() { return true; }, "Step 1 failed",
+ *     []() { return false; }, "Step 2 failed"
+ * );
  * @endcode
  */
 template<typename... Funcs>
 auto make_parallel_runner(parallel_runner_internal::StepWrapper<Funcs>&&... steps) {
     return ParallelRunner<Funcs...>{std::tuple<std::pair<Funcs, std::string_view>...>{std::make_pair(std::move(steps.func), steps.error_msg)...}};
+}
+
+// Overload for direct arguments (func, msg, func, msg, ...)
+// SFINAE to avoid ambiguity: only enable if first arg is not a StepWrapper
+template<typename First, typename... Args,
+         typename = std::enable_if_t<!parallel_runner_internal::is_step_wrapper_v<First>>>
+auto make_parallel_runner(First&& first, Args&&... args) {
+    static_assert(sizeof...(Args) % 2 == 1, "Arguments must come in pairs (function, error_message)");
+    
+    constexpr auto num_pairs = (sizeof...(Args) + 1) / 2;
+    auto indices = std::make_index_sequence<num_pairs>{};
+    
+    auto funcs = parallel_runner_internal::extract_funcs(indices, std::forward<First>(first), std::forward<Args>(args)...);
+    auto msgs = parallel_runner_internal::extract_msgs(indices, std::forward<First>(first), std::forward<Args>(args)...);
+    
+    return parallel_runner_internal::make_runner_from_pairs(std::move(funcs), std::move(msgs), indices);
 }
