@@ -195,18 +195,9 @@ auto make_runner_from_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs, std::index_seq
  * @brief Helper function to create a FunctionRunner with automatic type deduction
  * 
  * This function allows you to create a FunctionRunner that stores each callable
- * with its actual type, avoiding std::function overhead. You can either use 
- * step() wrappers or pass functions and error messages as alternating arguments.
+ * with its actual type, avoiding std::function overhead.
  * 
- * Example usage with step():
- * @code
- * auto runner = make_function_runner(
- *     step([]() { return true; }, "Step 1 failed"),
- *     step([]() { return false; }, "Step 2 failed")
- * );
- * @endcode
- * 
- * Example usage without step():
+ * Example usage with alternating arguments:
  * @code
  * auto runner = make_function_runner(
  *     []() { return true; }, "Step 1 failed",
@@ -214,23 +205,16 @@ auto make_runner_from_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs, std::index_seq
  * );
  * @endcode
  */
-template<typename... Funcs>
-auto make_function_runner(function_runner_internal::StepWrapper<Funcs>&&... steps) {
-    return FunctionRunner<Funcs...>{std::tuple<std::pair<Funcs, std::string_view>...>{std::make_pair(std::move(steps.func), steps.error_msg)...}};
-}
-
-// Overload for direct arguments (func, msg, func, msg, ...)
-// SFINAE to avoid ambiguity: only enable if first arg is not a StepWrapper
-template<typename First, typename... Args,
-         typename = std::enable_if_t<!function_runner_internal::is_step_wrapper_v<First>>>
-auto make_function_runner(First&& first, Args&&... args) {
-    static_assert(sizeof...(Args) % 2 == 1, "Arguments must come in pairs (function, error_message)");
+// Overload for alternating arguments (func, msg, func, msg, ...)
+template<typename First, typename Second, typename... Rest>
+auto make_function_runner(First&& first, Second&& second, Rest&&... rest) {
+    static_assert((sizeof...(Rest) + 2) % 2 == 0, "Arguments must come in pairs (function, error_message)");
     
-    constexpr auto num_pairs = (sizeof...(Args) + 1) / 2;
+    constexpr auto num_pairs = (sizeof...(Rest) + 2) / 2;
     auto indices = std::make_index_sequence<num_pairs>{};
     
-    auto funcs = function_runner_internal::extract_funcs(indices, std::forward<First>(first), std::forward<Args>(args)...);
-    auto msgs = function_runner_internal::extract_msgs(indices, std::forward<First>(first), std::forward<Args>(args)...);
+    auto funcs = function_runner_internal::extract_funcs(indices, std::forward<First>(first), std::forward<Second>(second), std::forward<Rest>(rest)...);
+    auto msgs = function_runner_internal::extract_msgs(indices, std::forward<First>(first), std::forward<Second>(second), std::forward<Rest>(rest)...);
     
     return function_runner_internal::make_runner_from_pairs(std::move(funcs), std::move(msgs), indices);
 }
