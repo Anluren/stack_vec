@@ -9,36 +9,31 @@
 
 namespace function_runner_internal {
 
-/**
- * @brief Helper struct for creating FunctionRunner steps
- * 
- * This allows for cleaner syntax when using make_function_runner:
- * @code
- * auto runner = make_function_runner(
- *     step([]() { return true; }, "Step 1 failed"),
- *     step([]() { return false; }, "Step 2 failed")
- * );
- * @endcode
- */
-template<typename Func>
-struct StepWrapper {
-    Func func;
-    std::string_view error_msg;
+// Helper to check if all odd-indexed arguments are convertible to string_view
+// and all even-indexed arguments are callable
+template<typename... Args>
+struct validate_alternating_args;
+
+template<typename Func, typename Msg>
+struct validate_alternating_args<Func, Msg> {
+    static_assert(std::is_invocable_v<Func>,
+                  "Functions (even-indexed arguments) must be callable with no arguments");
+    static_assert(std::is_convertible_v<Msg, std::string_view>,
+                  "Error messages (odd-indexed arguments) must be convertible to std::string_view");
+    static constexpr bool value = true;
 };
 
-// Deduction guide for CTAD
-template<typename Func>
-StepWrapper(Func, std::string_view) -> StepWrapper<std::decay_t<Func>>;
+template<typename Func, typename Msg, typename... Rest>
+struct validate_alternating_args<Func, Msg, Rest...> {
+    static_assert(std::is_invocable_v<Func>,
+                  "Functions (even-indexed arguments) must be callable with no arguments");
+    static_assert(std::is_convertible_v<Msg, std::string_view>,
+                  "Error messages (odd-indexed arguments) must be convertible to std::string_view");
+    static constexpr bool value = validate_alternating_args<Rest...>::value;
+};
 
-// Type trait to detect if a type is a StepWrapper
-template<typename T>
-struct is_step_wrapper : std::false_type {};
-
-template<typename Func>
-struct is_step_wrapper<StepWrapper<Func>> : std::true_type {};
-
-template<typename T>
-constexpr bool is_step_wrapper_v = is_step_wrapper<std::decay_t<T>>::value;
+template<typename... Args>
+constexpr bool validate_alternating_args_v = validate_alternating_args<Args...>::value;
 
 } // namespace function_runner_internal
 
@@ -209,6 +204,8 @@ auto make_runner_from_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs, std::index_seq
 template<typename First, typename Second, typename... Rest>
 auto make_function_runner(First&& first, Second&& second, Rest&&... rest) {
     static_assert((sizeof...(Rest) + 2) % 2 == 0, "Arguments must come in pairs (function, error_message)");
+    static_assert(function_runner_internal::validate_alternating_args_v<First, Second, Rest...>,
+                  "Arguments must alternate: function, message, function, message, ...");
     
     constexpr auto num_pairs = (sizeof...(Rest) + 2) / 2;
     auto indices = std::make_index_sequence<num_pairs>{};
