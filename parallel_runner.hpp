@@ -77,9 +77,9 @@ auto make_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs) {
  * Example usage:
  * @code
  * auto runner = make_parallel_runner(
- *     parallel_step([]() { return true; }, "Check 1 failed"),
- *     parallel_step([]() { return false; }, "Check 2 failed"),
- *     parallel_step([]() { return true; }, "Check 3 failed")
+ *     []() { return true; }, "Check 1 failed",
+ *     []() { return false; }, "Check 2 failed",
+ *     []() { return true; }, "Check 3 failed"
  * );
  * 
  * runner.run();

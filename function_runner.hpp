@@ -57,9 +57,9 @@ constexpr bool is_step_wrapper_v = is_step_wrapper<std::decay_t<T>>::value;
  * Example usage:
  * @code
  * auto runner = make_function_runner(
- *     step([]() { return true; }, "Step 1 failed"),
- *     step([]() { return false; }, "Step 2 failed"),
- *     step([]() { return true; }, "Step 3 failed")
+ *     []() { return true; }, "Step 1 failed",
+ *     []() { return false; }, "Step 2 failed",
+ *     []() { return true; }, "Step 3 failed"
  * );
  * 
  * int failed_idx = runner.run();
