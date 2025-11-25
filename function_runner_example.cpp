@@ -226,6 +226,39 @@ int main() {
         std::cout << "All direct steps succeeded!\n";
     }
 
+    std::cout << "\n=== Example 8: Functions returning errno-style error codes ===\n";
+
+    // Functions that return int error codes (0 = success, non-zero = error code)
+    auto errno_runner = make_function_runner(
+        []() -> int {
+            std::cout << "Opening file...\n";
+            return 0;  // Success
+        },
+        "Failed to open file",
+
+        []() -> int {
+            std::cout << "Reading data...\n";
+            return 5;  // Error code 5 (e.g., EIO - I/O error)
+        },
+        "Failed to read data",
+
+        []() -> int {
+            std::cout << "Processing data...\n";
+            return 0;  // Success
+        },
+        "Failed to process data");
+
+    result = errno_runner.run();
+
+    if (result >= 0) {
+        int error_code = errno_runner.result();
+        std::cout << "Failed at step " << result << "\n";
+        std::cout << "Error code: " << error_code << "\n";
+        std::cout << "Error message: " << errno_runner.error_message(result) << "\n";
+    } else {
+        std::cout << "All operations succeeded!\n";
+    }
+
     std::cout << "\n=== Size Summary ===\n";
     std::cout << "runner1 (3 lambdas):           " << sizeof(runner1) << " bytes\n";
     std::cout << "startup (4 functions):         " << sizeof(startup) << " bytes\n";
@@ -234,11 +267,13 @@ int main() {
     std::cout << "bind_runner (3 std::bind):     " << sizeof(bind_runner) << " bytes\n";
     std::cout << "lambda_runner (3 captures):    " << sizeof(lambda_runner) << " bytes\n";
     std::cout << "direct_runner (3 lambdas):     " << sizeof(direct_runner) << " bytes\n";
+    std::cout << "errno_runner (3 lambdas):      " << sizeof(errno_runner) << " bytes\n";
     
     std::cout << "\n=== Size Breakdown ===\n";
     std::cout << "Each runner stores:\n";
     std::cout << "  - std::tuple of (function, string_view) pairs\n";
     std::cout << "  - 1 int for m_failed_step (4 bytes)\n";
+    std::cout << "  - Result storage of return_type (4 bytes for int/bool)\n";
     std::cout << "  - Each std::string_view is 16 bytes (pointer + size)\n";
     std::cout << "\nCalculation examples:\n";
     std::cout << "  Simple lambda (no captures):     ~1 byte (empty class)\n";

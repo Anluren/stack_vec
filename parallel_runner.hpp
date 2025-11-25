@@ -9,6 +9,53 @@
 
 namespace parallel_runner_internal {
 
+// Helper to extract the return type of the first function (from alternating func, msg pairs)
+template <typename Func, typename Msg, typename... Rest>
+struct first_return_type {
+    using type = std::invoke_result_t<Func>;
+};
+
+template <typename... Args>
+using first_return_type_t = typename first_return_type<Args...>::type;
+
+// Helper to check if all functions (even-indexed args) have the same return type
+template <typename Expected, typename... Args>
+struct all_return_same_type;
+
+// Base case: no more arguments
+template <typename Expected>
+struct all_return_same_type<Expected> {
+    static constexpr bool value = true;
+};
+
+// Base case: only error message remaining (after last function was processed)
+template <typename Expected, typename Msg>
+struct all_return_same_type<Expected, Msg> {
+    static constexpr bool value = true;
+};
+
+// Recursive case: check function (even index) and skip message (odd index)
+template <typename Expected, typename Func, typename Msg, typename... Rest>
+struct all_return_same_type<Expected, Func, Msg, Rest...> {
+    static constexpr bool value = std::is_same_v<Expected, std::invoke_result_t<Func>> &&
+                                  all_return_same_type<Expected, Rest...>::value;
+};
+
+template <typename Expected, typename... Args>
+constexpr bool all_return_same_type_v = all_return_same_type<Expected, Args...>::value;
+
+// Helper to check if value indicates failure
+// For bool: false is failure
+// For other types: non-zero is failure (treating return value as error code)
+template <typename T>
+bool is_failure(T value) {
+    if constexpr (std::is_same_v<T, bool>) {
+        return !value;  // false is failure for bool
+    } else {
+        return value != T{};  // non-zero is failure for other types
+    }
+}
+
 // Helper to check if all odd-indexed arguments are convertible to string_view
 // and all even-indexed arguments are callable
 template <typename... Args>
@@ -74,6 +121,10 @@ auto make_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs) {
  * This class stores each function with its actual type (no type erasure), providing
  * zero-overhead execution with no heap allocations.
  *
+ * All functions must return the same type. Success/failure is determined as follows:
+ * - For bool: false = failure, true = success
+ * - For other types: non-zero = failure (error code), zero = success
+ *
  * @tparam Funcs The types of callable objects to execute
  *
  * Example usage:
@@ -97,11 +148,14 @@ auto make_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs) {
 template <typename... Funcs>
 class ParallelRunner {
    public:
+    /// The return type of all functions (all must match)
+    using return_type = parallel_runner_internal::first_return_type_t<Funcs..., std::string_view>;
+
     /// Tuple storing each function with its error message
     std::tuple<std::pair<Funcs, std::string_view>...> m_steps;
 
     /// Array to store results of each function
-    mutable std::array<bool, sizeof...(Funcs)> m_results{};
+    mutable std::array<return_type, sizeof...(Funcs)> m_results{};
 
     /// Flag indicating whether run() has been called
     mutable bool m_executed = false;
@@ -121,11 +175,23 @@ class ParallelRunner {
     /**
      * @brief Get the result of a specific step
      * @param index The step index
-     * @return true if the step succeeded, false if failed or not yet executed
+     * @return The actual return value of the function at the given index
      */
-    bool result(std::size_t index) const noexcept {
+    return_type result(std::size_t index) const noexcept {
         if (index < sizeof...(Funcs) && m_executed) {
             return m_results[index];
+        }
+        return return_type{};
+    }
+
+    /**
+     * @brief Check if a specific step succeeded
+     * @param index The step index
+     * @return true if the step succeeded, false if failed or not yet executed
+     */
+    bool succeeded(std::size_t index) const noexcept {
+        if (index < sizeof...(Funcs) && m_executed) {
+            return !parallel_runner_internal::is_failure(m_results[index]);
         }
         return false;
     }
@@ -134,41 +200,41 @@ class ParallelRunner {
      * @brief Get all results as an array
      * @return Array of all execution results
      */
-    const std::array<bool, sizeof...(Funcs)>& results() const noexcept { return m_results; }
+    const std::array<return_type, sizeof...(Funcs)>& results() const noexcept { return m_results; }
 
     /**
      * @brief Check if all steps succeeded
-     * @return true if all steps returned true, false otherwise
+     * @return true if all steps returned success values, false otherwise
      */
     bool all_succeeded() const noexcept {
         if (!m_executed) return false;
         for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
-            if (!m_results[i]) return false;
+            if (parallel_runner_internal::is_failure(m_results[i])) return false;
         }
         return true;
     }
 
     /**
      * @brief Check if any step succeeded
-     * @return true if at least one step returned true, false otherwise
+     * @return true if at least one step returned a success value, false otherwise
      */
     bool any_succeeded() const noexcept {
         if (!m_executed) return false;
         for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
-            if (m_results[i]) return true;
+            if (!parallel_runner_internal::is_failure(m_results[i])) return true;
         }
         return false;
     }
 
     /**
      * @brief Count how many steps succeeded
-     * @return Number of successful steps
+     * @return Number of steps that returned success values
      */
     std::size_t success_count() const noexcept {
         if (!m_executed) return 0;
         std::size_t count = 0;
         for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
-            if (m_results[i]) ++count;
+            if (!parallel_runner_internal::is_failure(m_results[i])) ++count;
         }
         return count;
     }
@@ -208,7 +274,7 @@ class ParallelRunner {
 
         std::size_t success_count = 0;
         for (std::size_t i = 0; i < sizeof...(Funcs); ++i) {
-            if (!m_results[i]) {
+            if (parallel_runner_internal::is_failure(m_results[i])) {
                 if (rerun(i)) {
                     ++success_count;
                 }
@@ -239,12 +305,12 @@ class ParallelRunner {
 
     template <std::size_t... Is>
     bool rerun_impl(std::size_t index, std::index_sequence<Is...>) const {
-        bool result = false;
-        (void)((Is == index ? (m_results[index] = std::get<Is>(m_steps).first(),
-                               result = m_results[index], true)
-                            : false) ||
+        bool found = false;
+        (void)((Is == index
+                    ? (m_results[Is] = std::get<Is>(m_steps).first(), found = true)
+                    : false) ||
                ...);
-        return result;
+        return found ? !parallel_runner_internal::is_failure(m_results[index]) : false;
     }
 };
 
@@ -266,6 +332,10 @@ auto make_runner_from_pairs(FuncsTuple&& funcs, MsgsTuple&& msgs, std::index_seq
  * This function allows you to create a ParallelRunner that stores each callable
  * with its actual type, avoiding std::function overhead.
  *
+ * All functions must return the same type.
+ * For bool: false = failure, true = success
+ * For other types: non-zero = failure (error code), zero = success
+ *
  * Example usage with alternating arguments:
  * @code
  * auto runner = make_parallel_runner(
@@ -281,6 +351,12 @@ auto make_parallel_runner(First&& first, Second&& second, Rest&&... rest) {
                   "Arguments must come in pairs (function, error_message)");
     static_assert(parallel_runner_internal::validate_alternating_args_v<First, Second, Rest...>,
                   "Arguments must alternate: function, message, function, message, ...");
+
+    // Validate that all functions return the same type
+    using ExpectedReturnType = parallel_runner_internal::first_return_type_t<First, Second, Rest...>;
+    static_assert(
+        parallel_runner_internal::all_return_same_type_v<ExpectedReturnType, First, Second, Rest...>,
+        "All functions must return the same type");
 
     constexpr auto num_pairs = (sizeof...(Rest) + 2) / 2;
     auto indices = std::make_index_sequence<num_pairs>{};

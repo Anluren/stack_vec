@@ -281,11 +281,62 @@ int main() {
     if (!direct_runner.all_succeeded()) {
         std::cout << "\nFailed checks:\n";
         for (std::size_t i = 0; i < direct_runner.size(); ++i) {
-            if (!direct_runner.result(i)) {
+            if (!direct_runner.succeeded(i)) {
                 std::cout << "  - Step " << i << ": " << direct_runner.error_message(i) << "\n";
             }
         }
     }
+
+    std::cout << "\n=== Example 9: Functions returning errno-style error codes ===\n";
+
+    // Functions that return int error codes (0 = success, non-zero = error code)
+    auto errno_runner = make_parallel_runner(
+        []() -> int {
+            std::cout << "Checking file permissions...\n";
+            return 0;  // Success
+        },
+        "Permission check failed",
+
+        []() -> int {
+            std::cout << "Checking disk space...\n";
+            return 28;  // Error code 28 (ENOSPC - No space left on device)
+        },
+        "Disk space check failed",
+
+        []() -> int {
+            std::cout << "Checking file existence...\n";
+            return 2;  // Error code 2 (ENOENT - No such file or directory)
+        },
+        "File existence check failed",
+
+        []() -> int {
+            std::cout << "Checking write access...\n";
+            return 0;  // Success
+        },
+        "Write access check failed");
+
+    errno_runner.run();
+
+    std::cout << "\nResults with error codes:\n";
+    for (std::size_t i = 0; i < errno_runner.size(); ++i) {
+        int error_code = errno_runner.result(i);
+        bool success = errno_runner.succeeded(i);
+        std::cout << "  Step " << i << ": error_code=" << error_code 
+                  << " (success=" << (success ? "true" : "false") << ")\n";
+        if (!success) {
+            std::cout << "    Error: " << errno_runner.error_message(i) << "\n";
+        }
+    }
+
+    const auto& error_codes = errno_runner.results();
+    std::cout << "\nAll error codes: [";
+    for (std::size_t i = 0; i < error_codes.size(); ++i) {
+        if (i > 0) std::cout << ", ";
+        std::cout << error_codes[i];
+    }
+    std::cout << "]\n";
+
+    std::cout << "Success rate: " << errno_runner.success_count() << "/" << errno_runner.size() << "\n";
 
     std::cout << "\n=== Size Summary ===\n";
     std::cout << "runner1 (3 lambdas):        " << sizeof(runner1) << " bytes\n";
@@ -296,21 +347,23 @@ int main() {
     std::cout << "bind_runner (5 std::bind):  " << sizeof(bind_runner) << " bytes\n";
     std::cout << "lambda_runner (4 captures): " << sizeof(lambda_runner) << " bytes\n";
     std::cout << "direct_runner (3 lambdas):  " << sizeof(direct_runner) << " bytes\n";
+    std::cout << "errno_runner (4 lambdas):   " << sizeof(errno_runner) << " bytes\n";
     
     std::cout << "\n=== Size Breakdown ===\n";
     std::cout << "Each runner stores:\n";
     std::cout << "  - std::tuple of (function, string_view) pairs\n";
-    std::cout << "  - std::array<bool, N> for results (N bytes)\n";
+    std::cout << "  - std::array<return_type, N> for results\n";
     std::cout << "  - Each std::string_view is 16 bytes (pointer + size)\n";
     std::cout << "\nCalculation examples:\n";
     std::cout << "  Simple lambda (no captures):     ~1 byte (empty class)\n";
     std::cout << "  Function pointer:                 8 bytes\n";
     std::cout << "  Lambda with &counter capture:     8 bytes (reference)\n";
     std::cout << "  std::bind object:                 ~24 bytes (stores function + bound args)\n";
-    std::cout << "\nFormula: sizeof(tuple<pair<Func, string_view>...>) + sizeof(array<bool, N>)\n";
-    std::cout << "  runner1: tuple<3 x (1 + 16)> + array<3> = 51 + 3 + padding → 80 bytes\n";
-    std::cout << "  health_checks: tuple<4 x (8 + 16)> + array<4> = 96 + 4 + padding → 104 bytes\n";
-    std::cout << "  bind_runner: tuple<5 x (24 + 16)> + array<5> = 200 + 5 + padding → 168 bytes\n";
+    std::cout << "\nFormula: sizeof(tuple<pair<Func, string_view>...>) + sizeof(array<return_type, N>)\n";
+    std::cout << "  runner1 (bool): tuple<3 x (1 + 16)> + array<bool,3> = 51 + 3 + padding → 80 bytes\n";
+    std::cout << "  errno_runner (int): tuple<4 x (1 + 16)> + array<int,4> = 68 + 16 + padding → 88 bytes\n";
+    std::cout << "  health_checks: tuple<4 x (8 + 16)> + array<bool,4> = 96 + 4 + padding → 104 bytes\n";
+    std::cout << "  bind_runner: tuple<5 x (24 + 16)> + array<bool,5> = 200 + 5 + padding → 168 bytes\n";
     
     std::cout << "\nNote: All storage is inline with std::array for results, no heap allocations!\n";
 
